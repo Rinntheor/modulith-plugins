@@ -1,0 +1,13 @@
+{
+  "name": "modulith-plugins",
+  "private": true,
+  "description": "Modulith Desktop 第一方插件生态仓库",
+  "type": "module",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "check": "node scripts/build.ts --check"
+  }
+}

@@ -13,12 +13,19 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 .
 ├── plugins/            插件源码，一个插件一个目录
 │   └── hello/          参考插件（目录规范的可执行形式）
-├── dist/               构建产物 .lcp 的落点
+├── dist/               构建产物 .lcp
+├── scripts/            打包与索引生成
+├── index.json          客户端读取的索引（由脚本生成，勿手工编辑）
 └── docs/               目录规范与发布流程
 ```
 
-打包与索引生成的脚本将在下一阶段加入 `scripts/`。在那之前发布是手工的，步骤见
-[docs/发布流程.md](docs/发布流程.md)。
+```bash
+node scripts/build.ts          # 打包 + 生成索引
+node scripts/build.ts --check  # 只校验索引与产物是否一致
+```
+
+零依赖，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，不经过编译）。
+完整发布步骤见 [docs/发布流程.md](docs/发布流程.md)。
 
 ## 插件是怎么到达用户的
 
