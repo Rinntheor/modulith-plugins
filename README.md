@@ -12,7 +12,10 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ```
 .
 ├── plugins/            插件源码，一个插件一个目录
-│   └── hello/          参考插件（目录规范的可执行形式）
+│   ├── hello/          参考插件：把所有约定示范一遍的最小完整形态
+│   ├── notes/          文本速记：只用 storage 的完整插件
+│   ├── pomodoro/       番茄工作钟：后台计时 + 应用内通知 + 自定义提示音
+│   └── quick-launch/   快捷启动：需要宿主原生能力的一类（process-spawn / filesystem-read）
 ├── dist/               构建产物 .lcp
 ├── scripts/            打包与索引生成
 ├── index.json          客户端读取的索引（由脚本生成，勿手工编辑）
@@ -65,6 +68,11 @@ node scripts/build.ts --check  # 只校验索引与产物是否一致
 
 `plugins/hello` 是参考实现。它刻意做到最小 —— 一个按钮，记住你点了几次。它的价值不在
 功能，而在把所有约定示范一遍：照着复制、改掉名字与图标，就是一份合法插件。
+
+另外三个是**完整的示例插件**，各自侧重一面：`notes` 只用一项权限，`pomodoro` 把计时核心
+放在 React 之外并用通知提醒，`quick-launch` 演示需要宿主原生能力的那一类。它们既是可用的
+插件，也是可以照着读的源码 —— 应用仓库里还有一份更小的、只示范核心接口的参考插件
+`modulith-desktop/samples/reference`。
 
 ## 贡献
 

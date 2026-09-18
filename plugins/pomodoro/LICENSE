@@ -1,0 +1,30 @@
+MIT License
+
+Copyright (c) 2026 环理论（Rinntheor）
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+说明（中文）
+
+本许可适用于本目录（plugins/pomodoro/）下的插件代码。
+
+本仓库根目录也有一份 LICENSE，适用于仓库自身（构建脚本与文档）；这一份只适用于本目录下的插件代码。两者都以 MIT 提供，以便其他作者直接复制作为自己插件的起点。
+
+宿主框架的授权边界见应用仓库的 PLUGIN-EXCEPTION.md 与 docs/07-法务/版权与授权.md。

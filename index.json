@@ -2,6 +2,131 @@
   "schemaVersion": 1,
   "plugins": [
     {
+      "id": "com.modulith.sample.notes",
+      "displayName": "文本速记",
+      "summary": "把想到的事写进上面那个框，点保存就收进下面的列表。可复制、修改、删除，不必先想标题。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "示例",
+        "效率"
+      ],
+      "keywords": [
+        "sample",
+        "notes",
+        "memo",
+        "demo"
+      ],
+      "icon": "plugins/notes/icon.svg",
+      "source": "plugins/notes",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "notes-v1.0.0",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.notes-1.0.0.lcp",
+            "size": 14381,
+            "sha256": "1f39b950e5812443cd28af0529be7ac3b5b7f24b32ab282ff34093a9ed7e717f"
+          }
+        }
+      ]
+    },
+    {
+      "id": "com.modulith.sample.pomodoro",
+      "displayName": "番茄工作钟",
+      "summary": "专注 / 短休息 / 长休息循环计时，时长、轮次、提示音与自动开始全部可调。结束时通过应用内通知提醒。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "示例",
+        "效率"
+      ],
+      "keywords": [
+        "sample",
+        "pomodoro",
+        "timer",
+        "notification",
+        "demo"
+      ],
+      "icon": "plugins/pomodoro/icon.svg",
+      "source": "plugins/pomodoro",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "pomodoro-v1.0.0",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "notification",
+            "filesystem-read"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.pomodoro-1.0.0.lcp",
+            "size": 18226,
+            "sha256": "e21152f23b84dda16d04d2a71c194f48d65bde58b2e1e618c84a1c7b4f79b70b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "com.modulith.sample.quick-launch",
+      "displayName": "快捷启动",
+      "summary": "把常用程序收在一处，点一下就打开。支持分组、多种视图、拖入添加、图标提取、备注与右键菜单；演示 process-spawn / filesystem-read 两项原生能力的用法。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "示例",
+        "效率"
+      ],
+      "keywords": [
+        "sample",
+        "launcher",
+        "shortcut",
+        "demo"
+      ],
+      "icon": "plugins/quick-launch/icon.svg",
+      "source": "plugins/quick-launch",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "quick-launch-v1.0.0",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "process-spawn",
+            "filesystem-read"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.quick-launch-1.0.0.lcp",
+            "size": 23566,
+            "sha256": "56e95d1f13ff58d1b5287b712cf8be247a1395740aaa0f5a2f68f400c9d61129"
+          }
+        }
+      ]
+    },
+    {
       "id": "com.rinntheor.modulith.hello",
       "displayName": "问候",
       "summary": "最小可用的参考插件：一个按钮，记住你点了几次。它的用途是示范目录结构与宿主接口，不是提供功能。",
