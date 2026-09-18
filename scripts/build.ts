@@ -9,7 +9,7 @@
 // 本脚本是该格式的生产方。格式只有那一份定义 —— 在这里再抄一份说明必然漂移。
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,6 +22,45 @@ const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const PLUGINS_DIR = join(ROOT, 'plugins');
 const DIST_DIR = join(ROOT, 'dist');
 const INDEX_FILE = join(ROOT, 'index.json');
+
+/**
+ * 索引的签名。与索引放在同一目录 —— 签名给的是索引的**字节**，分开存放必然出现
+ * 「索引换了、签名没换」的错配，而那个错配的表现是所有人的市场打不开。
+ *
+ * 由 `tauri signer sign index.json` 生成（tauri 会写在同名的 `.sig` 文件里）。
+ */
+const INDEX_SIGNATURE_FILE = `${INDEX_FILE}.sig`;
+
+/**
+ * 检查签名是否与索引配套。
+ *
+ * 这道检查挡的是一个**代价很大、又很容易犯**的错误：改了插件、重新生成了索引、却忘了
+ * 重新签名。客户端会因此验签失败，市场对所有人打不开 —— 而「忘了签名」这件事在本地
+ * 没有任何迹象。
+ *
+ * 用修改时间比较是粗糙的：它挡不住「把签名也换成另一份旧索引的签名」这种组合。真正的
+ * 判定只能由客户端验签完成；这里的目标是**在推送之前提醒**，不是取代验签。
+ *
+ * 本脚本刻意不接触私钥（它只负责打包与索引），因此它不会替你签名，只会告诉你该签。
+ */
+function signatureProblem(): string | null {
+  if (!existsSync(INDEX_SIGNATURE_FILE)) {
+    return (
+      'index.json.sig 不存在：索引尚未签名，客户端会拒绝使用它。\n' +
+      '  签名方式：pnpm tauri signer sign <本仓库路径>/index.json'
+    );
+  }
+
+  if (statSync(INDEX_FILE).mtimeMs > statSync(INDEX_SIGNATURE_FILE).mtimeMs) {
+    return (
+      'index.json 比它的签名新：索引改过但没有重新签名。\n' +
+      '  客户端会验签失败并拒绝使用该索引，市场对所有人打不开。\n' +
+      '  重新签名：pnpm tauri signer sign <本仓库路径>/index.json'
+    );
+  }
+
+  return null;
+}
 
 // ============================================================
 // 索引的数据结构
@@ -368,6 +407,19 @@ function main(): number {
   console.log(
     `\n索引已写入 index.json：${index.plugins.length} 个插件、${versionCount} 个版本，哈希全部复核通过。`
   );
+
+  if (signatureProblem() !== null) {
+    // 不当作失败：签名需要私钥，而本脚本刻意不接触私钥。但必须说得足够响 ——
+    // 忘了这一步的代价是所有人的市场打不开。
+    console.log(
+      '\n⚠ 索引需要签名（推送前必须完成）：\n' +
+        '  pnpm tauri signer sign "' +
+        INDEX_FILE +
+        '"\n' +
+        '  然后把生成的 index.json.sig 一并提交。'
+    );
+  }
+
   return 0;
 }
 
@@ -405,10 +457,21 @@ function runCheck(fresh: readonly FreshPlugin[]): number {
     problems.push('index.json 与仓库内容不一致，需要重新生成');
   }
 
+  const signatureIssue = signatureProblem();
+  if (signatureIssue) problems.push(signatureIssue);
+
   if (problems.length > 0) {
     console.error('校验未通过：\n');
     for (const problem of problems) console.error(`  ✘ ${problem}`);
-    console.error('\n运行 node scripts/build.ts 重新打包并生成索引。');
+
+    // 结尾的指引必须与问题匹配。签名缺失**不是**重新生成索引能解决的，
+    // 一律提示 build 会让人照着做一遍然后发现毫无变化。
+    const onlySignatureIssue = problems.length === 1 && signatureIssue !== null;
+    console.error(
+      onlySignatureIssue
+        ? '\n签名需要私钥，本脚本刻意不接触它，因此不会代签。'
+        : '\n修复后重新运行校验；若提示索引与产物不一致，运行 node scripts/build.ts。'
+    );
     return 1;
   }
 

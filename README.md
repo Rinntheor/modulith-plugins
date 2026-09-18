@@ -16,6 +16,7 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ├── dist/               构建产物 .lcp
 ├── scripts/            打包与索引生成
 ├── index.json          客户端读取的索引（由脚本生成，勿手工编辑）
+├── index.json.sig      索引的签名（客户端验签通过才使用索引）
 └── docs/               目录规范与发布流程
 ```
 
