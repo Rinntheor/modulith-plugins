@@ -1,0 +1,24 @@
+# 所有文本文件一律以 LF 存储与检出。
+#
+# 这不是风格偏好，是正确性要求。
+#
+# 本仓库承诺「仓库里的文件」与「用户装到的 .lcp」逐字节一致（见 README.md
+# 「为什么同时提交源码与 .lcp」）。若 git 在检出时把 LF 转成 CRLF，打包出来的
+# index.js 就与仓库内容不是同一串字节，而客户端校验索引里的 sha256 会失败 ——
+# 表现为一个「文件可能已被篡改」的安全告警，实际原因只是换行符。
+#
+# eol=lf 同时约束仓库与工作区，因此在 Windows 上检出也得到 LF。
+* text=auto eol=lf
+
+# 压缩产物是二进制，任何转换都会损坏它
+*.lcp binary
+
+# 图片与字体
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary

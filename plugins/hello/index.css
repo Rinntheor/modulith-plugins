@@ -1,0 +1,71 @@
+/* plugins/hello/index.css
+ *
+ * 类名统一带 `hello__` 前缀，避免与宿主或其他插件冲突。
+ *
+ * **不使用 Tailwind 工具类。** Tailwind 是在构建宿主时扫描宿主源码生成类名的，
+ * 插件在运行时才注入，它写的 `bg-white` 不在那次扫描范围内，因此不会生成对应规则 ——
+ * 类名存在，但没有任何样式生效。
+ *
+ * 颜色复用宿主的 `--accent-*` 变量，并带兜底值：万一变量名变化，也只是颜色不同，
+ * 不会退化成没有背景色的按钮。
+ */
+
+.hello {
+  padding: 24px;
+  max-width: 560px;
+}
+
+.hello__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.hello__muted {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+.hello__count {
+  margin-top: 20px;
+  font-size: 15px;
+  /* 等宽数字：次数变化时按钮不会被撑得左右抖动 */
+  font-variant-numeric: tabular-nums;
+  color: #374151;
+}
+
+.hello__button {
+  margin-top: 12px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent-600, #4f46e5);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.hello__button:hover {
+  background: var(--accent-500, #6366f1);
+}
+
+.hello__button:active {
+  transform: translateY(1px);
+}
+
+/* 深色模式。宿主在 <html> 上切换 .dark */
+:root.dark .hello__title {
+  color: #f3f4f6;
+}
+
+:root.dark .hello__count {
+  color: #d1d5db;
+}
+
+:root.dark .hello__muted {
+  color: #9ca3af;
+}

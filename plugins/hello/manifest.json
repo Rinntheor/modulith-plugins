@@ -1,0 +1,26 @@
+{
+  "name": "com.rinntheor.modulith.hello",
+  "displayName": "问候",
+  "version": "1.0.0",
+  "description": "最小可用的参考插件：一个按钮，记住你点了几次。它的用途是示范目录结构与宿主接口，不是提供功能。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": ["参考"],
+  "keywords": ["reference", "template", "hello"],
+  "engines": {
+    "loopcore": ">=1.0.0"
+  },
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": ["storage"],
+  "sandboxLevel": 1
+}
