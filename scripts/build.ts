@@ -32,6 +32,17 @@ const INDEX_FILE = join(ROOT, 'index.json');
 const INDEX_SIGNATURE_FILE = `${INDEX_FILE}.sig`;
 
 /**
+ * 签名命令，写在这里一次性给三处引用。
+ *
+ * **`-f` 不能省。** `tauri signer sign` 必须知道用哪把私钥（`-f` 或环境变量
+ * `TAURI_SIGNING_PRIVATE_KEY_PATH`），少了它命令会直接失败。给一条不能照抄执行的命令，
+ * 比不给更浪费时间 —— 所以这里写全，并明确标出要替换的部分。
+ */
+const SIGN_COMMAND =
+  'pnpm tauri signer sign -f <私钥路径> "<本仓库路径>/index.json"\n' +
+  '  （tauri CLI 在应用仓库里；私钥路径也可用 TAURI_SIGNING_PRIVATE_KEY_PATH 环境变量给出）';
+
+/**
  * 检查签名是否与索引配套。
  *
  * 这道检查挡的是一个**代价很大、又很容易犯**的错误：改了插件、重新生成了索引、却忘了
@@ -47,7 +58,8 @@ function signatureProblem(): string | null {
   if (!existsSync(INDEX_SIGNATURE_FILE)) {
     return (
       'index.json.sig 不存在：索引尚未签名，客户端会拒绝使用它。\n' +
-      '  签名方式：pnpm tauri signer sign <本仓库路径>/index.json'
+      '  ' +
+      SIGN_COMMAND
     );
   }
 
@@ -55,7 +67,8 @@ function signatureProblem(): string | null {
     return (
       'index.json 比它的签名新：索引改过但没有重新签名。\n' +
       '  客户端会验签失败并拒绝使用该索引，市场对所有人打不开。\n' +
-      '  重新签名：pnpm tauri signer sign <本仓库路径>/index.json'
+      '  ' +
+      SIGN_COMMAND
     );
   }
 
@@ -412,11 +425,9 @@ function main(): number {
     // 不当作失败：签名需要私钥，而本脚本刻意不接触私钥。但必须说得足够响 ——
     // 忘了这一步的代价是所有人的市场打不开。
     console.log(
-      '\n⚠ 索引需要签名（推送前必须完成）：\n' +
-        '  pnpm tauri signer sign "' +
-        INDEX_FILE +
-        '"\n' +
-        '  然后把生成的 index.json.sig 一并提交。'
+      '\n⚠ 索引需要签名（推送前必须完成）：\n  ' +
+        SIGN_COMMAND +
+        '\n  生成的 index.json.sig 需要与 index.json 在同一次提交里。'
     );
   }
 
