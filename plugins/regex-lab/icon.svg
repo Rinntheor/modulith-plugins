@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="正则实验场">
+  <!-- 星号：量词；方框：被捕获的一段。两件东西加起来就是「正则」这个记号本身。 -->
+  <path d="M16.5 3.4v9.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M12.5 5.7l8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M20.5 5.7l-8 4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="2.6" y="13.2" width="8.4" height="8.2" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+</svg>

@@ -1,0 +1,1156 @@
+/* plugins/regex-lab/index.css
+ *
+ * 类名统一带 `regexlab__` 前缀，避免与宿主或其他插件冲突。
+ *
+ * **不使用 Tailwind 工具类。** Tailwind 是在构建宿主时扫描宿主源码生成类名的，
+ * 插件在运行时才注入，`bg-white` 这类写法不在那次扫描范围内，因此不会生成对应规则 ——
+ * 类名存在，但没有任何样式生效。
+ *
+ * 颜色复用宿主的 `--accent-*` 变量并带兜底值；深色模式全部自己写（宿主那张深色映射表
+ * 管不到插件，漏一个元素就是深色界面上一块刺眼的白）。
+ * 层次用 1px 描边表达，而不是重阴影 —— 宿主的卡片也是这么做的。
+ *
+ * 两处尺寸约定写在下面，它们必须成对出现：
+ *   --regexlab-mono       所有展示代码的地方共用的等宽字体
+ *   --regexlab-hit-radius 高亮色块的圆角，和 mark 的背景一起用
+ */
+
+.regexlab {
+  --regexlab-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --regexlab-line: #e5e7eb;
+  --regexlab-line-soft: #f3f4f6;
+  --regexlab-surface: #ffffff;
+  --regexlab-surface-sunken: #f9fafb;
+  --regexlab-text: #111827;
+  --regexlab-text-soft: #6b7280;
+  --regexlab-text-mid: #374151;
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 24px 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--regexlab-text);
+  background: transparent;
+}
+
+.regexlab *,
+.regexlab *::before,
+.regexlab *::after {
+  box-sizing: border-box;
+}
+
+/* --- 页头 ---------------------------------------------------------------- */
+
+.regexlab__header {
+  flex: none;
+  padding-bottom: 12px;
+}
+
+.regexlab__title-block {
+  min-width: 0;
+}
+
+.regexlab__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.regexlab__subtitle {
+  margin: 3px 0 0;
+  max-width: 720px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--regexlab-text-soft);
+}
+
+.regexlab__muted {
+  color: var(--regexlab-text-soft);
+  font-size: 12.5px;
+}
+
+.regexlab__error-text {
+  color: #b91c1c;
+  font-size: 12.5px;
+}
+
+/* --- 顶部一次性提示 ------------------------------------------------------ */
+
+.regexlab__notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+}
+
+.regexlab__notice--warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.regexlab__notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.regexlab__notice-close {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+
+.regexlab__notice-close:hover {
+  opacity: 1;
+}
+
+/* --- 表达式与开关 -------------------------------------------------------- */
+
+.regexlab__controls {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--regexlab-surface);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 12px;
+}
+
+.regexlab__pattern-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.regexlab__pattern-field {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.regexlab__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--regexlab-text-mid);
+}
+
+.regexlab__input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--regexlab-text);
+  background: var(--regexlab-surface);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.regexlab__input--mono {
+  font-family: var(--regexlab-mono);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.regexlab__input--search {
+  max-width: 240px;
+}
+
+.regexlab__input::placeholder {
+  color: #9ca3af;
+}
+
+.regexlab__input:hover {
+  border-color: #d1d5db;
+}
+
+.regexlab__input:focus {
+  outline: none;
+  border-color: var(--accent-500, #6366f1);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-500, #6366f1) r g b / 0.18);
+}
+
+/*
+ * 上面这条 rim 光晕用了 rgb(from ...) 相对颜色语法。它不被支持时整条声明会被丢弃，
+ * 那时仍有边框颜色变化作为焦点反馈 —— 焦点环不会消失。
+ */
+
+.regexlab__actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.regexlab__flags-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.regexlab__flags {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+  padding: 3px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+.regexlab__flag {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  font-family: var(--regexlab-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--regexlab-text-mid);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.regexlab__flag:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: var(--regexlab-line);
+}
+
+.regexlab__flag:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.regexlab__flag--on {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+}
+
+.regexlab__flag--on:hover:not(:disabled) {
+  background: var(--accent-500, #6366f1);
+  border-color: var(--accent-500, #6366f1);
+}
+
+.regexlab__flag:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.regexlab__hint {
+  margin: 0;
+  flex: 1 1 240px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--regexlab-text-soft);
+}
+
+.regexlab__hint--tight {
+  flex: none;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  color: #92400e;
+}
+
+/* --- 状态条 -------------------------------------------------------------- */
+
+.regexlab__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+  border-top: 1px dashed var(--regexlab-line);
+  padding-block: 8px 0;
+}
+
+.regexlab__status-expr {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 8px;
+  font-family: var(--regexlab-mono);
+  font-size: 12.5px;
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-radius: 6px;
+}
+
+.regexlab__status-meta {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--regexlab-text-mid);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 提示块（错误 / 过长） ---------------------------------------------- */
+
+.regexlab__alert {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.regexlab__alert--error {
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.regexlab__alert--warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.regexlab__alert-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.regexlab__alert-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.regexlab__alert-raw {
+  margin: 0;
+  font-family: var(--regexlab-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  opacity: 0.75;
+  word-break: break-word;
+}
+
+.regexlab__alert .regexlab__button {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* --- 按钮 ---------------------------------------------------------------- */
+
+.regexlab__button {
+  flex: none;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--regexlab-text-mid);
+  background: var(--regexlab-surface);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.regexlab__button:hover:not(:disabled) {
+  background: var(--regexlab-surface-sunken);
+  border-color: #d1d5db;
+}
+
+.regexlab__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.regexlab__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.regexlab__button--primary {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+}
+
+.regexlab__button--primary:hover:not(:disabled) {
+  background: var(--accent-500, #6366f1);
+  border-color: var(--accent-500, #6366f1);
+}
+
+.regexlab__button--small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.regexlab__button--danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.regexlab__button--danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* --- 主体：左输入 / 右结果 ---------------------------------------------- */
+
+.regexlab__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.regexlab__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--regexlab-surface);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.regexlab__pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--regexlab-line);
+}
+
+.regexlab__pane-head--tabs {
+  flex-wrap: wrap;
+}
+
+.regexlab__pane-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.regexlab__pane-meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--regexlab-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.regexlab__textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: 14px;
+  font-family: var(--regexlab-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--regexlab-text);
+  background: var(--regexlab-surface);
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+.regexlab__textarea::placeholder {
+  color: #9ca3af;
+}
+
+.regexlab__textarea:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: -2px;
+}
+
+/* --- 结果标签页 ---------------------------------------------------------- */
+
+.regexlab__tabs {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+  padding: 2px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+.regexlab__tab {
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--regexlab-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.regexlab__tab:hover {
+  color: var(--regexlab-text);
+  background: #ffffff;
+}
+
+.regexlab__tab--on {
+  color: var(--regexlab-text);
+  background: #ffffff;
+  border-color: var(--regexlab-line);
+  font-weight: 500;
+}
+
+.regexlab__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.regexlab__panel:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: -2px;
+}
+
+/* --- 空态 ---------------------------------------------------------------- */
+
+.regexlab__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 140px;
+  padding: 20px 4px;
+}
+
+.regexlab__empty-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--regexlab-text-mid);
+}
+
+.regexlab__empty-hint {
+  margin: 0;
+  max-width: 420px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--regexlab-text-soft);
+}
+
+/* --- 匹配高亮 ------------------------------------------------------------ */
+
+.regexlab__matchpane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.regexlab__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.regexlab__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+.regexlab__stat-label {
+  font-size: 11.5px;
+  color: var(--regexlab-text-soft);
+}
+
+.regexlab__stat-value {
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.regexlab__highlight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.regexlab__select {
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--regexlab-text);
+  background: var(--regexlab-surface);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.regexlab__select:hover {
+  border-color: #d1d5db;
+}
+
+.regexlab__select:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: 1px;
+}
+
+.regexlab__highlight {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow: auto;
+  padding: 14px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+.regexlab__highlight-text {
+  margin: 0;
+  font-family: var(--regexlab-mono);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.regexlab__hit {
+  padding: 1px 0;
+  color: inherit;
+  background: var(--accent-100, #e0e7ff);
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 var(--accent-400, #818cf8);
+}
+
+/* 空匹配（例如 a* 匹配到空串）也要看得见，否则用户会以为漏画了 */
+.regexlab__hit-empty {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: var(--accent-500, #6366f1);
+}
+
+/* --- 明细表 -------------------------------------------------------------- */
+
+.regexlab__detailpane {
+  min-width: 0;
+}
+
+.regexlab__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.regexlab__table-caption {
+  padding-bottom: 8px;
+  text-align: left;
+  font-size: 12px;
+  color: var(--regexlab-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.regexlab__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--regexlab-text-soft);
+  background: var(--regexlab-surface);
+  border-bottom: 1px solid var(--regexlab-line);
+}
+
+.regexlab__table td {
+  padding: 7px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--regexlab-line-soft);
+}
+
+.regexlab__table tbody tr:hover td {
+  background: var(--regexlab-surface-sunken);
+}
+
+.regexlab__cell-num,
+.regexlab__cell-pos {
+  width: 1%;
+  white-space: nowrap;
+  color: var(--regexlab-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.regexlab__cell-text {
+  font-family: var(--regexlab-mono);
+  word-break: break-word;
+}
+
+.regexlab__cell-groups {
+  min-width: 150px;
+}
+
+.regexlab__group-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 1px 0;
+}
+
+.regexlab__group-name {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--regexlab-text-soft);
+}
+
+.regexlab__group-value {
+  font-family: var(--regexlab-mono);
+  font-size: 12px;
+  padding: 1px 5px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 5px;
+  word-break: break-word;
+}
+
+.regexlab__group-pos {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--regexlab-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 替换预览 ------------------------------------------------------------ */
+
+.regexlab__replacepane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.regexlab__replace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.regexlab__replace-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.regexlab__replace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.regexlab__replace-text {
+  margin: 0;
+  padding: 14px;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--regexlab-mono);
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+/* --- 表达式库 ------------------------------------------------------------ */
+
+.regexlab__librarypane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.regexlab__subtitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.regexlab__save-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--regexlab-surface-sunken);
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+}
+
+.regexlab__save-row {
+  display: flex;
+  gap: 8px;
+}
+
+.regexlab__saved-list,
+.regexlab__builtin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.regexlab__saved-item,
+.regexlab__builtin-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--regexlab-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.regexlab__saved-item:hover,
+.regexlab__builtin-item:hover {
+  border-color: #d1d5db;
+  background: var(--regexlab-surface-sunken);
+}
+
+.regexlab__saved-main,
+.regexlab__builtin-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.regexlab__saved-name,
+.regexlab__builtin-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.regexlab__saved-expr,
+.regexlab__builtin-expr {
+  font-family: var(--regexlab-mono);
+  font-size: 12px;
+  color: var(--accent-700, #4338ca);
+  word-break: break-all;
+}
+
+.regexlab__builtin-note {
+  margin: 0;
+  max-width: 520px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--regexlab-text-soft);
+}
+
+.regexlab__saved-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.regexlab__builtin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid var(--regexlab-line-soft);
+}
+
+.regexlab__builtin-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.regexlab__builtin-group-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--regexlab-text-soft);
+}
+
+/* --- 页脚 ---------------------------------------------------------------- */
+
+.regexlab__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--regexlab-line);
+}
+
+/* --- 滚动条 -------------------------------------------------------------- */
+
+.regexlab__panel::-webkit-scrollbar,
+.regexlab__highlight::-webkit-scrollbar,
+.regexlab__replace-text::-webkit-scrollbar,
+.regexlab__textarea::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.regexlab__panel::-webkit-scrollbar-thumb,
+.regexlab__highlight::-webkit-scrollbar-thumb,
+.regexlab__replace-text::-webkit-scrollbar-thumb,
+.regexlab__textarea::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+.regexlab__panel::-webkit-scrollbar-thumb:hover,
+.regexlab__highlight::-webkit-scrollbar-thumb:hover,
+.regexlab__replace-text::-webkit-scrollbar-thumb:hover,
+.regexlab__textarea::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+  background-clip: content-box;
+}
+
+.regexlab__panel::-webkit-scrollbar-track,
+.regexlab__highlight::-webkit-scrollbar-track,
+.regexlab__replace-text::-webkit-scrollbar-track,
+.regexlab__textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- 窗口较矮时收紧 ------------------------------------------------
+ *
+ * 最小窗口是 960×560，这个高度下标题下的那句说明可以先收起来，
+ * 让输入框与结果区拿到更多高度。这是「最小尺寸下必须完整可用」的落点。
+ */
+
+@media (max-height: 660px) {
+  .regexlab {
+    padding: 14px 20px 0;
+  }
+
+  .regexlab__subtitle {
+    display: none;
+  }
+
+  .regexlab__controls {
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .regexlab__footer {
+    padding: 8px 0 10px;
+  }
+}
+
+/* 窗口很窄时（宿主最小宽度 960，这里只是兜底）改成上下排布 */
+@media (max-width: 900px) {
+  .regexlab__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(200px, 1fr);
+    overflow: auto;
+  }
+}
+
+/* === 深色模式 ============================================================
+ *
+ * 宿主在 <html> 上切换 .dark。宿主那张把工具类名映射到深色取值的全局表管不到插件 ——
+ * 插件的类名不在宿主构建期的扫描范围内。因此下面每一条都必须自己写。
+ */
+
+:root.dark .regexlab {
+  --regexlab-line: #2c3242;
+  --regexlab-line-soft: #252a38;
+  --regexlab-surface: #1a1e2b;
+  --regexlab-surface-sunken: #11141d;
+  --regexlab-text: #f3f4f6;
+  --regexlab-text-soft: #9ca3af;
+  --regexlab-text-mid: #d1d5db;
+}
+
+:root.dark .regexlab__input,
+:root.dark .regexlab__select {
+  color: var(--regexlab-text);
+  background: #11141d;
+}
+
+:root.dark .regexlab__input::placeholder,
+:root.dark .regexlab__textarea::placeholder {
+  color: #6b7280;
+}
+
+:root.dark .regexlab__input:hover,
+:root.dark .regexlab__select:hover,
+:root.dark .regexlab__saved-item:hover,
+:root.dark .regexlab__builtin-item:hover {
+  border-color: #3b4252;
+}
+
+:root.dark .regexlab__input:focus {
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-400, #818cf8) r g b / 0.22);
+}
+
+:root.dark .regexlab__notice {
+  color: #a7f3d0;
+  background: #0d2a24;
+  border-color: #14532d;
+}
+
+:root.dark .regexlab__notice--warn {
+  color: #fcd34d;
+  background: #2a2312;
+  border-color: #78350f;
+}
+
+:root.dark .regexlab__hint--tight {
+  color: #fcd34d;
+  background: #2a2312;
+  border-color: #78350f;
+}
+
+:root.dark .regexlab__flag:hover:not(:disabled),
+:root.dark .regexlab__tab:hover,
+:root.dark .regexlab__tab--on {
+  background: #222736;
+}
+
+:root.dark .regexlab__flag--on,
+:root.dark .regexlab__flag--on:hover:not(:disabled) {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+}
+
+:root.dark .regexlab__status-expr {
+  color: var(--accent-300, #a5b4fc);
+  background: #1e1b4b;
+}
+
+:root.dark .regexlab__alert--error {
+  color: #fecaca;
+  background: #2b1416;
+  border-color: #7f1d1d;
+}
+
+:root.dark .regexlab__alert--warn {
+  color: #fcd34d;
+  background: #2a2312;
+  border-color: #78350f;
+}
+
+:root.dark .regexlab__error-text {
+  color: #fca5a5;
+}
+
+:root.dark .regexlab__button {
+  color: var(--regexlab-text-mid);
+  background: #1a1e2b;
+}
+
+:root.dark .regexlab__button:hover:not(:disabled) {
+  background: #222736;
+  border-color: #3b4252;
+}
+
+:root.dark .regexlab__button--primary {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+}
+
+:root.dark .regexlab__button--primary:hover:not(:disabled) {
+  background: var(--accent-500, #6366f1);
+  border-color: var(--accent-500, #6366f1);
+}
+
+:root.dark .regexlab__button--danger {
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
+:root.dark .regexlab__button--danger:hover:not(:disabled) {
+  background: #2b1416;
+  border-color: #991b1b;
+}
+
+:root.dark .regexlab__hit {
+  background: #3730a3;
+  box-shadow: inset 0 -1px 0 var(--accent-400, #818cf8);
+}
+
+:root.dark .regexlab__hit-empty {
+  background: var(--accent-300, #a5b4fc);
+}
+
+:root.dark .regexlab__saved-expr,
+:root.dark .regexlab__builtin-expr {
+  color: var(--accent-300, #a5b4fc);
+}
+
+:root.dark .regexlab__panel::-webkit-scrollbar-thumb,
+:root.dark .regexlab__highlight::-webkit-scrollbar-thumb,
+:root.dark .regexlab__replace-text::-webkit-scrollbar-thumb,
+:root.dark .regexlab__textarea::-webkit-scrollbar-thumb {
+  background: #3b4252;
+  background-clip: content-box;
+}
+
+:root.dark .regexlab__panel::-webkit-scrollbar-thumb:hover,
+:root.dark .regexlab__highlight::-webkit-scrollbar-thumb:hover,
+:root.dark .regexlab__replace-text::-webkit-scrollbar-thumb:hover,
+:root.dark .regexlab__textarea::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+  background-clip: content-box;
+}
