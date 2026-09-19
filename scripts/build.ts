@@ -192,6 +192,20 @@ function walkFiles(dir: string): string[] {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       if (entry.name.startsWith('.')) continue;
       const abs = join(current, entry.name);
+
+      // **符号链接必须显式拒绝，不能静默跳过。**
+      //
+      // `Dirent` 对符号链接既不是 isDirectory 也不是 isFile，因此下面两个分支都不命中，
+      // 条目会被安静地漏掉。而 `manifest.ts` 用 `existsSync` + `statSync`（两者都**跟随**
+      // 链接）判定必需文件是否存在 —— 于是一个把 `index.js` 写成符号链接的插件能通过
+      // 全部校验、被打包"成功"，而包内缺少入口文件。
+      if (entry.isSymbolicLink()) {
+        throw new Error(
+          `不支持符号链接: ${relative(dir, abs)} —— 链接不会进入 .lcp，` +
+            `而清单校验会跟随它认为文件存在，结果是「校验通过但包内缺文件」`
+        );
+      }
+
       if (entry.isDirectory()) {
         visit(abs);
       } else if (entry.isFile()) {
@@ -340,6 +354,75 @@ function verifyIndexArtifacts(index: Index): string[] {
   return problems;
 }
 
+/**
+ * 找出「同一个版本号被打包出了不同字节」的情况。
+ *
+ * 这类情况必须被**拒绝**而不是静默接受：索引里的 `sha256` 是「这个版本号对应这份内容」
+ * 的唯一凭据，一旦同一版本号出现两份内容，客户端缓存、CDN 缓存与用户手里已装的包就会
+ * 互相矛盾 —— 而 `README.md` 承诺的「同一个版本号下的内容永远一致」也就只是句话。
+ *
+ * 这个错误最常见的成因是「改了源码但忘了升版本」。此前的脚本在这种情况下会正常成功，
+ * `--check` 也随之通过（它比对的正是刚生成的新索引），因此工具层没有任何拦截，只剩
+ * tag 纪律在撑。正确做法是升一个版本（PATCH）。
+ */
+function findVersionRewrites(previous: Index | null, fresh: readonly FreshPlugin[]): string[] {
+  const problems: string[] = [];
+
+  for (const item of fresh) {
+    const recorded = previous?.plugins
+      .find((p) => p.id === item.manifest.name)
+      ?.versions.find((v) => v.version === item.version.version);
+
+    if (recorded && recorded.package.sha256 !== item.version.package.sha256) {
+      problems.push(
+        `${item.manifest.name} ${item.version.version}: 该版本已在索引里发布过，但当前源码打包出的哈希不同\n` +
+          `      索引记录 ${recorded.package.sha256}\n` +
+          `      当前打包 ${item.version.package.sha256}\n` +
+          `      已发布的版本号不可改写 —— 请升一个版本后重新打包`
+      );
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * 检查**历史条目**引用的包是否仍在位且哈希一致。
+ *
+ * 本次工作区里存在的插件版本会被重新打包、其字节稍后才落盘，因此这里跳过它们；
+ * 其余条目（旧版本、以及 `plugins/` 下已不存在的插件）必须能在磁盘上找到。
+ *
+ * 它存在的意义是让「产物与索引不一致」这一类失败发生在**落盘之前**：原先这件事由
+ * `verifyIndexArtifacts` 在落盘之后做，失败时 `dist/` 已经被本次运行改写，
+ * 与文档承诺的「任何一步失败都不会写出产物」矛盾。
+ */
+function verifyRecordedArtifacts(
+  previous: Index | null,
+  fresh: readonly FreshPlugin[]
+): string[] {
+  const problems: string[] = [];
+  const freshlyPacked = new Set(
+    fresh.map((item) => `${item.manifest.name}@${item.version.version}`)
+  );
+
+  for (const plugin of previous?.plugins ?? []) {
+    for (const version of plugin.versions) {
+      if (freshlyPacked.has(`${plugin.id}@${version.version}`)) continue;
+
+      const file = join(ROOT, version.package.path);
+      if (!existsSync(file)) {
+        problems.push(`${plugin.id} ${version.version}: 索引引用的包不存在 ${version.package.path}`);
+        continue;
+      }
+      if (sha256(readFileSync(file)) !== version.package.sha256) {
+        problems.push(`${plugin.id} ${version.version}: ${version.package.path} 的哈希与索引不符`);
+      }
+    }
+  }
+
+  return problems;
+}
+
 function reportDropped(previous: Index | null, next: Index): void {
   const kept = new Set(next.plugins.map((p) => p.id));
   for (const plugin of previous?.plugins ?? []) {
@@ -392,7 +475,28 @@ function main(): number {
 
   if (checkOnly) return runCheck(fresh);
 
-  // ---- 3. 落盘 ----
+  // ---- 3. 落盘之前的全部校验 ----
+  //
+  // 顺序是刻意的：**能在落盘前发现的失败，一律在落盘前拒绝**。此前是 dist/ 先落盘、
+  // 复核在其后，于是「索引与产物不一致」时留下的是「dist 已换、index 未换」的半更新
+  // 状态，与本文件开头和 docs/发布流程.md 承诺的「任何一步失败都不会写出产物」相矛盾。
+  const previous = readIndex();
+
+  const rewrites = findVersionRewrites(previous, fresh);
+  if (rewrites.length > 0) {
+    console.error('已发布版本的内容被改写，未生成任何产物：\n');
+    for (const problem of rewrites) console.error(`  ✘ ${problem}`);
+    return 1;
+  }
+
+  const staleProblems = verifyRecordedArtifacts(previous, fresh);
+  if (staleProblems.length > 0) {
+    console.error('历史产物与索引不一致，未生成任何产物：\n');
+    for (const problem of staleProblems) console.error(`  ✘ ${problem}`);
+    return 1;
+  }
+
+  // ---- 4. 落盘 ----
   mkdirSync(DIST_DIR, { recursive: true });
   for (const item of fresh) {
     writeFileSync(join(ROOT, item.version.package.path), item.buffer);
@@ -401,11 +505,10 @@ function main(): number {
     );
   }
 
-  const previous = readIndex();
+  // ---- 5. 生成索引并复核 ----
   const index = buildIndex(previous ?? { schemaVersion: SCHEMA_VERSION, plugins: [] }, fresh);
 
-  // 落盘前最后一道：索引引用的每个包都必须存在且哈希一致。
-  // 它能抓住「手工改过 index.json」与「dist 里的包被删或被换」两类问题。
+  // 新包此刻已在位，因此这一步能抓住「手工改过 index.json」与「dist 里的包被换」两类问题。
   const mismatches = verifyIndexArtifacts(index);
   if (mismatches.length > 0) {
     console.error('\n产物与索引不一致，未写入索引：');

@@ -46,6 +46,8 @@ node scripts/build.ts --check  # 只校验索引与产物是否一致
    下载 `.lcp`（同样是 jsDelivr 与 GitHub 直连两条候选），校验 `sha256`，再交给应用已有的
    安装流水线。
 4. README 与 `.lcp` 都按该版本的**不可变 tag** 取，因此同一个版本号下的内容永远一致。
+   `node scripts/build.ts` 把这条从"约定"变成硬约束：同一个版本号若被打包出不同字节，
+   脚本直接失败并要求升一个版本（见 [docs/发布流程.md](docs/发布流程.md) 第 4 节）。
 
 存储用 GitHub（免费、有版本历史、可回溯），加速用 jsDelivr（免费 CDN，国内有节点）。
 月成本为零。
