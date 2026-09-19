@@ -163,6 +163,48 @@
           }
         }
       ]
+    },
+    {
+      "id": "com.rinntheor.modulith.kanban",
+      "displayName": "看板",
+      "summary": "把活儿按「待处理 / 进行中 / 已完成」摆开，卡片可按指针拖动或键盘移动；支持自定义列表、优先级、截止日与速记草稿。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "效率"
+      ],
+      "keywords": [
+        "kanban",
+        "todo",
+        "task",
+        "board",
+        "productivity"
+      ],
+      "icon": "plugins/kanban/icon.svg",
+      "source": "plugins/kanban",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "kanban-v1.0.0",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "plugin-communicate",
+            "notification"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.kanban-1.0.0.lcp",
+            "size": 44508,
+            "sha256": "0790777ea532c78f4bab4f0c7349d3bf6d7bfb694beb098a969e17bef6b526f2"
+          }
+        }
+      ]
     }
   ]
 }
