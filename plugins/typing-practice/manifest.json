@@ -1,0 +1,26 @@
+{
+  "name": "com.rinntheor.modulith.typing-practice",
+  "displayName": "打字练习",
+  "version": "1.1.0",
+  "description": "逐字符判定的打字练习：中英文语料可选，实时显示速度与准确率，记录历史与走势，并能看出自己常打错哪些字。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/typing-practice",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": ["效率"],
+  "keywords": ["typing", "practice", "wpm", "keyboard", "打字"],
+  "engines": {
+    "loopcore": ">=1.0.0"
+  },
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": ["storage"],
+  "sandboxLevel": 1
+}
