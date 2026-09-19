@@ -1,0 +1,26 @@
+{
+  "name": "com.rinntheor.modulith.color-lab",
+  "displayName": "颜色与对比度",
+  "version": "1.0.0",
+  "description": "看清一种颜色的各种写法（含 OKLCH），由它推出一整套色阶，并按 WCAG 标准算出它与背景的对比度是否达标。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/color-lab",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": ["开发", "效率"],
+  "keywords": ["color", "contrast", "wcag", "a11y", "oklch", "palette", "颜色", "对比度"],
+  "engines": {
+    "loopcore": ">=1.0.0"
+  },
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": ["storage"],
+  "sandboxLevel": 1
+}

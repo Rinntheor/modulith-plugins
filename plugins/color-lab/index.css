@@ -1,0 +1,793 @@
+/* plugins/color-lab/index.css
+ *
+ * 类名统一带 `colorlab__` 前缀，避免与宿主或其他插件冲突。
+ *
+ * **不使用 Tailwind 工具类。** Tailwind 是在构建宿主时扫描宿主源码生成类名的，
+ * 插件在运行时才注入，`bg-white` 这类写法不在那次扫描范围内，因此不会生成对应规则 ——
+ * 类名存在，但没有任何样式生效。
+ *
+ * 颜色复用宿主的 `--accent-*` 变量并带兜底值；深色模式全部自己写。
+ *
+ * 注意：色块、色阶、预览区这些地方的颜色是**内联样式**（因为它们就是用户正在查看的颜色），
+ * 不该被深色模式改写。深色模式只处理界面本身的底色、描边与文字。
+ */
+
+.colorlab {
+  --colorlab-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --colorlab-line: #e5e7eb;
+  --colorlab-line-soft: #f3f4f6;
+  --colorlab-surface: #ffffff;
+  --colorlab-surface-sunken: #f9fafb;
+  --colorlab-text: #111827;
+  --colorlab-text-soft: #6b7280;
+  --colorlab-text-mid: #374151;
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 24px 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--colorlab-text);
+  background: transparent;
+}
+
+.colorlab *,
+.colorlab *::before,
+.colorlab *::after {
+  box-sizing: border-box;
+}
+
+.colorlab__muted {
+  color: var(--colorlab-text-soft);
+  font-size: 12.5px;
+}
+
+/* --- 页头 ---------------------------------------------------------------- */
+
+.colorlab__header {
+  flex: none;
+  padding-bottom: 10px;
+}
+
+.colorlab__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.colorlab__subtitle {
+  margin: 3px 0 0;
+  max-width: 760px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--colorlab-text-soft);
+}
+
+/* --- 提示 ---------------------------------------------------------------- */
+
+.colorlab__notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+}
+
+.colorlab__notice--warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.colorlab__notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.colorlab__notice-close {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+
+.colorlab__notice-close:hover {
+  opacity: 1;
+}
+
+/* --- 颜色输入 ------------------------------------------------------------ */
+
+.colorlab__fields {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--colorlab-surface);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 12px;
+}
+
+.colorlab__field {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.colorlab__fields-actions {
+  flex: none;
+  padding-top: 20px;
+}
+
+.colorlab__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--colorlab-text-mid);
+}
+
+.colorlab__field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.colorlab__swatch {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+  /* 透明色也要看得出来：棋盘格底 */
+  background-image: linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+    linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+
+.colorlab__input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--colorlab-text);
+  background: var(--colorlab-surface);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.colorlab__input--mono {
+  font-family: var(--colorlab-mono);
+}
+
+.colorlab__input--short {
+  flex: none;
+  width: 150px;
+}
+
+.colorlab__input::placeholder {
+  color: #9ca3af;
+}
+
+.colorlab__input:hover {
+  border-color: #d1d5db;
+}
+
+.colorlab__input:focus {
+  outline: none;
+  border-color: var(--accent-500, #6366f1);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-500, #6366f1) r g b / 0.18);
+}
+
+.colorlab__input[aria-invalid='true'] {
+  border-color: #fca5a5;
+}
+
+.colorlab__picker {
+  flex: none;
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  background: var(--colorlab-surface);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.colorlab__picker:hover {
+  border-color: #d1d5db;
+}
+
+.colorlab__field-error {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #b91c1c;
+}
+
+/* --- 主体 ---------------------------------------------------------------- */
+
+.colorlab__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.colorlab__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--colorlab-surface);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 12px;
+}
+
+.colorlab__pane-title {
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 10px 14px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--colorlab-surface);
+  border-bottom: 1px solid var(--colorlab-line-soft);
+}
+
+.colorlab__panel {
+  flex: none;
+  padding: 10px 14px 14px;
+}
+
+/* --- 各种写法 ------------------------------------------------------------ */
+
+.colorlab__formats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.colorlab__format-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--colorlab-line-soft);
+}
+
+.colorlab__format-label {
+  flex: none;
+  width: 132px;
+  font-size: 12px;
+  color: var(--colorlab-text-soft);
+}
+
+.colorlab__format-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--colorlab-mono);
+  font-size: 12.5px;
+  word-break: break-all;
+}
+
+/* --- 空态 ---------------------------------------------------------------- */
+
+.colorlab__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 2px;
+}
+
+.colorlab__empty-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--colorlab-text-mid);
+}
+
+.colorlab__empty-hint {
+  margin: 0;
+  max-width: 440px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--colorlab-text-soft);
+}
+
+/* --- 色阶 ---------------------------------------------------------------- */
+
+.colorlab__scale {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.colorlab__scale-bar {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--colorlab-line);
+}
+
+.colorlab__scale-step {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 2px;
+  font-family: var(--colorlab-mono);
+  font-size: 10.5px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.colorlab__scale-step:hover {
+  transform: translateY(-2px);
+}
+
+.colorlab__scale-step--anchor {
+  box-shadow: inset 0 0 0 2px var(--accent-600, #4f46e5);
+}
+
+.colorlab__scale-stop {
+  font-weight: 600;
+}
+
+.colorlab__scale-hex {
+  opacity: 0.75;
+}
+
+.colorlab__scale-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.colorlab__option-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--colorlab-surface-sunken);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+}
+
+.colorlab__option {
+  padding: 3px 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--colorlab-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.colorlab__option:hover {
+  color: var(--colorlab-text);
+  background: #ffffff;
+}
+
+.colorlab__option--on {
+  color: var(--colorlab-text);
+  background: #ffffff;
+  border-color: var(--colorlab-line);
+  font-weight: 500;
+}
+
+/* --- 色盲模拟 ------------------------------------------------------------ */
+
+.colorlab__blind {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.colorlab__blind-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.colorlab__blind-swatch {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+}
+
+.colorlab__blind-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.colorlab__blind-name {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.colorlab__blind-hex {
+  font-family: var(--colorlab-mono);
+  font-size: 12px;
+  color: var(--colorlab-text-soft);
+}
+
+/* --- 对比度 -------------------------------------------------------------- */
+
+.colorlab__contrast {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.colorlab__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+}
+
+.colorlab__preview-large {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.colorlab__preview-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.colorlab__ratio {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.colorlab__ratio-value {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.colorlab__ratio-level {
+  font-size: 13px;
+  color: var(--colorlab-text-soft);
+}
+
+.colorlab__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.colorlab__table th {
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--colorlab-text-soft);
+  border-bottom: 1px solid var(--colorlab-line);
+}
+
+.colorlab__table td {
+  padding: 7px 8px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--colorlab-line-soft);
+}
+
+.colorlab__check-label {
+  display: block;
+  font-weight: 500;
+}
+
+.colorlab__check-note {
+  display: block;
+  font-size: 11.5px;
+  color: var(--colorlab-text-soft);
+}
+
+.colorlab__cell-num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.colorlab__pass {
+  color: #047857;
+  font-weight: 500;
+}
+
+.colorlab__fail {
+  color: #b91c1c;
+  font-weight: 500;
+}
+
+.colorlab__fix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.colorlab__fix-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* --- 导出 ---------------------------------------------------------------- */
+
+.colorlab__export {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.colorlab__export-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.colorlab__export-text {
+  margin: 0;
+  padding: 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--colorlab-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+  background: var(--colorlab-surface-sunken);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+}
+
+/* --- 按钮 ---------------------------------------------------------------- */
+
+.colorlab__button {
+  flex: none;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--colorlab-text-mid);
+  background: var(--colorlab-surface);
+  border: 1px solid var(--colorlab-line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.colorlab__button:hover:not(:disabled) {
+  background: var(--colorlab-surface-sunken);
+  border-color: #d1d5db;
+}
+
+.colorlab__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.colorlab__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.colorlab__button--small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* --- 页脚 ---------------------------------------------------------------- */
+
+.colorlab__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--colorlab-line);
+}
+
+/* --- 滚动条 -------------------------------------------------------------- */
+
+.colorlab__pane::-webkit-scrollbar,
+.colorlab__export-text::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.colorlab__pane::-webkit-scrollbar-thumb,
+.colorlab__export-text::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+.colorlab__pane::-webkit-scrollbar-thumb:hover,
+.colorlab__export-text::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+  background-clip: content-box;
+}
+
+.colorlab__pane::-webkit-scrollbar-track,
+.colorlab__export-text::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- 窗口较矮时收紧 ------------------------------------------------------ */
+
+@media (max-height: 660px) {
+  .colorlab {
+    padding: 14px 20px 0;
+  }
+
+  .colorlab__subtitle {
+    display: none;
+  }
+
+  .colorlab__fields {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+
+  .colorlab__footer {
+    padding: 8px 0 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .colorlab__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(200px, 1fr);
+    overflow: auto;
+  }
+}
+
+/* === 深色模式 ============================================================
+ *
+ * 宿主在 <html> 上切换 .dark。宿主那张把工具类名映射到深色取值的全局表管不到插件。
+ * 注意：色块与色阶用的是内联样式，它们本来就不该被深色模式改写。
+ */
+
+:root.dark .colorlab {
+  --colorlab-line: #2c3242;
+  --colorlab-line-soft: #252a38;
+  --colorlab-surface: #1a1e2b;
+  --colorlab-surface-sunken: #11141d;
+  --colorlab-text: #f3f4f6;
+  --colorlab-text-soft: #9ca3af;
+  --colorlab-text-mid: #d1d5db;
+}
+
+:root.dark .colorlab__input {
+  color: var(--colorlab-text);
+  background: #11141d;
+}
+
+:root.dark .colorlab__input::placeholder {
+  color: #6b7280;
+}
+
+:root.dark .colorlab__input:hover,
+:root.dark .colorlab__picker:hover {
+  border-color: #3b4252;
+}
+
+:root.dark .colorlab__input:focus {
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-400, #818cf8) r g b / 0.22);
+}
+
+:root.dark .colorlab__input[aria-invalid='true'] {
+  border-color: #991b1b;
+}
+
+:root.dark .colorlab__notice {
+  color: #a7f3d0;
+  background: #0d2a24;
+  border-color: #14532d;
+}
+
+:root.dark .colorlab__notice--warn {
+  color: #fcd34d;
+  background: #2a2312;
+  border-color: #78350f;
+}
+
+:root.dark .colorlab__picker {
+  background: #11141d;
+}
+
+:root.dark .colorlab__swatch {
+  border-color: #3b4252;
+  background-image: linear-gradient(45deg, #2c3242 25%, transparent 25%),
+    linear-gradient(-45deg, #2c3242 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2c3242 75%),
+    linear-gradient(-45deg, transparent 75%, #2c3242 75%);
+}
+
+:root.dark .colorlab__field-error,
+:root.dark .colorlab__fail {
+  color: #fca5a5;
+}
+
+:root.dark .colorlab__pass {
+  color: #6ee7b7;
+}
+
+:root.dark .colorlab__option:hover,
+:root.dark .colorlab__option--on {
+  color: var(--colorlab-text);
+  background: #222736;
+}
+
+:root.dark .colorlab__button {
+  color: var(--colorlab-text-mid);
+  background: #1a1e2b;
+}
+
+:root.dark .colorlab__button:hover:not(:disabled) {
+  background: #222736;
+  border-color: #3b4252;
+}
+
+:root.dark .colorlab__pane::-webkit-scrollbar-thumb,
+:root.dark .colorlab__export-text::-webkit-scrollbar-thumb {
+  background: #3b4252;
+  background-clip: content-box;
+}
+
+:root.dark .colorlab__pane::-webkit-scrollbar-thumb:hover,
+:root.dark .colorlab__export-text::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+  background-clip: content-box;
+}

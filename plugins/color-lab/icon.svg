@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="颜色与对比度">
+  <!-- 半黑半白的一个圆：颜色本身，以及它和背景的关系。 -->
+  <circle cx="9.6" cy="12" r="6.4" fill="none" stroke="currentColor" stroke-width="1.7"/>
+  <path d="M9.6 5.6a6.4 6.4 0 0 1 0 12.8z" fill="currentColor"/>
+  <path d="M17.4 8.4h3.6M17.4 12h3.6M17.4 15.6h3.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity="0.7"/>
+</svg>
