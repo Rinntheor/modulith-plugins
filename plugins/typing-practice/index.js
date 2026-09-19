@@ -281,25 +281,55 @@
   }
 
   /**
+   * 把超过一整行的词切开。
+   *
+   * 中文没有空格，所以一个「词」可能是一整句甚至一整段 —— 而折行只在词之间发生。
+   * 结果是这一段独占一行、直接冲出容器边界。这不是罕见情况：任何一句长过一行宽度的
+   * 中文都会触发它，而且窗口越宽、字号越大，能触发它的句子反而越多。
+   *
+   * 切开的每一段都是独立的词，只有**最后一段**保留尾随空格 —— 中间不能凭空补空格，
+   * 否则字符索引会与判定用的文本错位，打空格就会判错。
+   */
+  function splitLongWords(words, budget) {
+    var limit = Math.max(4, budget);
+    var out = [];
+    for (var i = 0; i < words.length; i += 1) {
+      var word = words[i];
+      if (word.text.length + 1 <= limit) {
+        out.push({ text: word.text, count: word.count, tail: true });
+        continue;
+      }
+      var rest = word.text;
+      while (rest.length > 0) {
+        var piece = rest.slice(0, limit);
+        rest = rest.slice(limit);
+        var isLast = rest.length === 0;
+        out.push({ text: piece, count: piece.length + (isLast ? 1 : 0), tail: isLast });
+      }
+    }
+    return out;
+  }
+
+  /**
    * 按容器宽度自己折行，并切成若干块。
    *
    * 自己折行而不是交给浏览器：光标位置必须与视觉行严格一致，而浏览器在哪个位置折行
    * 不可预测（还会受字体回退影响）。块是 memo 的边界 —— 打错一个字只让那一块重渲染。
    *
-   * 字符宽度按 1em 估算（中文字符正好 1em，等宽西文约 0.6em）。宁可估宽一点：
-   * 估窄了会让中文行溢出容器，而溢出的位置恰好是光标最容易跑丢的地方。
-   * 单个词本身超过预算时不强行拆词（拆词会让索引与文本脱节），那一行就让它超一点。
+   * 字符宽度按「一个字符 = 字符层的一个字号」估算（中文字符正好 1em，等宽西文约 0.6em）。
+   * 宁可估宽一点：估窄了会让中文行溢出容器，而溢出的位置恰好是光标最容易跑丢的地方。
+   *
+   * `unit` 必须由调用方从**字符层**实测得出（字号 + 字距）。不要传面板自身的字号 ——
+   * 那是一回事吗？不是，面板继承的是根容器的 14px，详见 PracticeArea 里 measure() 的注释。
    */
-  function buildLayout(text, width, fontSize) {
-    var words = toWords(text);
-    var unit = fontSize;
+  function buildLayout(text, width, unit) {
     var budget = Math.max(4, Math.floor(width / unit) - 1);
+    var words = splitLongWords(toWords(text), budget);
     var lines = [];
     var current = [];
     var used = 0;
     var index = 0;
     var chunks = [];
-    var chunkStart = 0;
 
     function flushLine() {
       if (current.length === 0) return;
@@ -319,11 +349,7 @@
     flushLine();
 
     for (var j = 0; j < lines.length; j += 1) {
-      var lineWords = lines[j].words;
-      for (var k = 0; k < lineWords.length; k += 1) {
-        if (lineWords[k] === lineWords[0]) chunkStart = lines[j].startIndex;
-      }
-      chunks.push({ words: lineWords, startIndex: lines[j].startIndex });
+      chunks.push({ words: lines[j].words, startIndex: lines[j].startIndex });
     }
     return { words: words, lines: lines, chunks: chunks };
   }
@@ -1287,17 +1313,19 @@
     );
   }
 
-  /** 一个词（含尾随空格）单独 memo：只有它这一段的状态变了才重渲染。 */
+  /** 一个词单独 memo：只有它这一段的状态变了才重渲染。 */
   var Word = memo(function Word(props) {
     var text = props.text;
     var start = props.start;
     var status = props.status;
     var cursor = props.cursor;
+    // 一个词被切成多行时，只有最后一段带尾随空格（见 splitLongWords）
+    var tail = props.tail !== false;
     var nodes = [];
     for (var i = 0; i < text.length; i += 1) {
       nodes.push(charNode(text.charAt(i), start + i, status, cursor, false));
     }
-    nodes.push(charNode(' ', start + text.length, status, cursor, true));
+    if (tail) nodes.push(charNode(' ', start + text.length, status, cursor, true));
     return h('span', { className: 'tp__word' }, nodes);
   });
 
@@ -1312,7 +1340,16 @@
     var nodes = [];
     var index = startIndex;
     for (var i = 0; i < words.length; i += 1) {
-      nodes.push(h(Word, { key: index, text: words[i].text, start: index, status: status, cursor: cursor }));
+      nodes.push(
+        h(Word, {
+          key: index,
+          text: words[i].text,
+          start: index,
+          tail: words[i].tail !== false,
+          status: status,
+          cursor: cursor,
+        })
+      );
       index += words[i].count;
     }
     return h('span', { className: 'tp__line' }, nodes);
@@ -1357,7 +1394,8 @@
     var progress = progressState[0];
     var setProgress = progressState[1];
 
-    var boxState = useState({ width: 0, fontSize: 21 });
+    // unit 是「一个字符占多少像素」：字符层的字号 + 字距。折行预算用它算，不能用面板的字号。
+    var boxState = useState({ width: 0, unit: 21 });
     var box = boxState[0];
     var setBox = boxState[1];
 
@@ -1367,12 +1405,29 @@
       if (!node || typeof ResizeObserver === 'undefined') return undefined;
       var measure = function () {
         var style = window.getComputedStyle(node);
-        var fontSize = parseFloat(style.fontSize) || 21;
         var paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
         var width = node.clientWidth - paddingX;
+
+        // 折行预算必须用**字符层**的度量，而不是面板自己的字号。
+        //
+        // 这里此前读的是面板的 font-size，可面板根本没有设置字号 —— 它继承的是根容器的
+        // 14px，字符层用的却是 --tp-font-size（19 / 21 / 22px，随窗口宽度变化）。
+        // 于是预算按 14px 算、实际每个字符 22px 宽，一行被塞进约 1.5 倍的字符数。
+        // 窗口越宽偏得越多，表现就是「全屏之后中文飞出打字区域」。
+        var textNode = node.querySelector('.tp__text') || layerRef.current;
+        var textStyle = textNode ? window.getComputedStyle(textNode) : null;
+        var fontSize = textStyle ? parseFloat(textStyle.fontSize) : NaN;
+        var letterSpacing = textStyle ? parseFloat(textStyle.letterSpacing) : NaN;
+        if (!isFinite(fontSize) || fontSize <= 0) {
+          fontSize = parseFloat(style.getPropertyValue('--tp-font-size'));
+        }
+        if (!isFinite(fontSize) || fontSize <= 0) fontSize = 21;
+        if (!isFinite(letterSpacing)) letterSpacing = 0;
+        var unit = fontSize + letterSpacing;
+
         setBox(function (prev) {
-          if (Math.abs(prev.width - width) < 2 && prev.fontSize === fontSize) return prev;
-          return { width: width, fontSize: fontSize };
+          if (Math.abs(prev.width - width) < 2 && Math.abs(prev.unit - unit) < 0.05) return prev;
+          return { width: width, unit: unit };
         });
       };
       measure();
@@ -1385,10 +1440,10 @@
 
     var layout = useMemo(
       function () {
-        if (box.width <= 0) return null;
-        return buildLayout(target, box.width, box.fontSize);
+        if (box.width <= 0 || !(box.unit > 0)) return null;
+        return buildLayout(target, box.width, box.unit);
       },
-      [target, box.width, box.fontSize]
+      [target, box.width, box.unit]
     );
 
     var statsState = useState({ correct: 0, marks: 0 });
