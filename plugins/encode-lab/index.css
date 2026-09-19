@@ -1,0 +1,707 @@
+/* plugins/encode-lab/index.css
+ *
+ * 类名统一带 `encodelab__` 前缀，避免与宿主或其他插件冲突。
+ *
+ * **不使用 Tailwind 工具类。** Tailwind 是在构建宿主时扫描宿主源码生成类名的，
+ * 插件在运行时才注入，`bg-white` 这类写法不在那次扫描范围内，因此不会生成对应规则 ——
+ * 类名存在，但没有任何样式生效。
+ *
+ * 颜色复用宿主的 `--accent-*` 变量并带兜底值；深色模式全部自己写（宿主那张深色映射表
+ * 管不到插件，漏一个元素就是深色界面上一块刺眼的白）。
+ * 层次用 1px 描边表达，而不是重阴影 —— 宿主的卡片也是这么做的。
+ */
+
+.encodelab {
+  --encodelab-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --encodelab-line: #e5e7eb;
+  --encodelab-line-soft: #f3f4f6;
+  --encodelab-surface: #ffffff;
+  --encodelab-surface-sunken: #f9fafb;
+  --encodelab-text: #111827;
+  --encodelab-text-soft: #6b7280;
+  --encodelab-text-mid: #374151;
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 20px 24px 0;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--encodelab-text);
+  background: transparent;
+}
+
+.encodelab *,
+.encodelab *::before,
+.encodelab *::after {
+  box-sizing: border-box;
+}
+
+.encodelab__muted {
+  color: var(--encodelab-text-soft);
+  font-size: 12.5px;
+}
+
+/* --- 页头 ---------------------------------------------------------------- */
+
+.encodelab__header {
+  flex: none;
+  padding-bottom: 10px;
+}
+
+.encodelab__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.encodelab__subtitle {
+  margin: 3px 0 0;
+  max-width: 760px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--encodelab-text-soft);
+}
+
+/* --- 顶部一次性提示 ------------------------------------------------------ */
+
+.encodelab__notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+}
+
+.encodelab__notice--warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.encodelab__notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.encodelab__notice-close {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease;
+}
+
+.encodelab__notice-close:hover {
+  opacity: 1;
+}
+
+/* --- 工具选择与选项 ------------------------------------------------------ */
+
+.encodelab__toolbar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--encodelab-surface);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 12px;
+}
+
+.encodelab__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.encodelab__tool {
+  padding: 5px 11px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--encodelab-text-mid);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.encodelab__tool:hover {
+  background: var(--encodelab-surface-sunken);
+  border-color: var(--encodelab-line);
+}
+
+.encodelab__tool--on {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+  font-weight: 500;
+}
+
+.encodelab__tool--on:hover {
+  background: var(--accent-500, #6366f1);
+  border-color: var(--accent-500, #6366f1);
+}
+
+.encodelab__toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.encodelab__blurb {
+  margin: 0;
+  flex: 1 1 320px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--encodelab-text-soft);
+}
+
+.encodelab__direction,
+.encodelab__option-group {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+  padding: 2px;
+  background: var(--encodelab-surface-sunken);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 8px;
+}
+
+.encodelab__direction-button,
+.encodelab__option {
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--encodelab-text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.encodelab__direction-button:hover,
+.encodelab__option:hover {
+  color: var(--encodelab-text);
+  background: #ffffff;
+}
+
+.encodelab__direction-button--on,
+.encodelab__option--on {
+  color: var(--encodelab-text);
+  background: #ffffff;
+  border-color: var(--encodelab-line);
+  font-weight: 500;
+}
+
+.encodelab__options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.encodelab__label {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--encodelab-text-mid);
+}
+
+/* --- 主体 ---------------------------------------------------------------- */
+
+.encodelab__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.encodelab__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--encodelab-surface);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.encodelab__pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--encodelab-line);
+}
+
+.encodelab__pane-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.encodelab__pane-meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--encodelab-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.encodelab__textarea {
+  flex: 1 1 auto;
+  min-height: 90px;
+  width: 100%;
+  padding: 14px;
+  font-family: var(--encodelab-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--encodelab-text);
+  background: var(--encodelab-surface);
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+.encodelab__textarea::placeholder {
+  color: #9ca3af;
+}
+
+.encodelab__textarea:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: -2px;
+}
+
+.encodelab__key-field {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--encodelab-line);
+  background: var(--encodelab-surface-sunken);
+}
+
+.encodelab__input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--encodelab-text);
+  background: var(--encodelab-surface);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.encodelab__input--mono {
+  font-family: var(--encodelab-mono);
+}
+
+.encodelab__input::placeholder {
+  color: #9ca3af;
+}
+
+.encodelab__input:hover {
+  border-color: #d1d5db;
+}
+
+.encodelab__input:focus {
+  outline: none;
+  border-color: var(--accent-500, #6366f1);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-500, #6366f1) r g b / 0.18);
+}
+
+.encodelab__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--encodelab-text-soft);
+}
+
+.encodelab__input-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--encodelab-line);
+}
+
+/* --- 按钮 ---------------------------------------------------------------- */
+
+.encodelab__button {
+  flex: none;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--encodelab-text-mid);
+  background: var(--encodelab-surface);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.encodelab__button:hover:not(:disabled) {
+  background: var(--encodelab-surface-sunken);
+  border-color: #d1d5db;
+}
+
+.encodelab__button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.encodelab__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.encodelab__button--small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+/* --- 结果 ---------------------------------------------------------------- */
+
+.encodelab__panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+.encodelab__panel:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: -2px;
+}
+
+.encodelab__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.encodelab__result-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--encodelab-text-soft);
+}
+
+.encodelab__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--encodelab-surface-sunken);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 8px;
+  transition: border-color 0.15s ease;
+}
+
+.encodelab__card:hover {
+  border-color: #d1d5db;
+}
+
+.encodelab__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.encodelab__card-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.encodelab__card-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.encodelab__card-value {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.encodelab__card-value--mono {
+  font-family: var(--encodelab-mono);
+  letter-spacing: 0.01em;
+}
+
+.encodelab__card-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--encodelab-text-soft);
+}
+
+/* --- 空态与错误 ---------------------------------------------------------- */
+
+.encodelab__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-height: 140px;
+  padding: 20px 4px;
+}
+
+.encodelab__empty-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--encodelab-text-mid);
+}
+
+.encodelab__empty-hint {
+  margin: 0;
+  max-width: 440px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--encodelab-text-soft);
+}
+
+.encodelab__alert {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  color: #7f1d1d;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.encodelab__alert-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.encodelab__alert-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* --- 页脚 ---------------------------------------------------------------- */
+
+.encodelab__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--encodelab-line);
+}
+
+/* --- 滚动条 -------------------------------------------------------------- */
+
+.encodelab__panel::-webkit-scrollbar,
+.encodelab__card-value::-webkit-scrollbar,
+.encodelab__textarea::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.encodelab__panel::-webkit-scrollbar-thumb,
+.encodelab__card-value::-webkit-scrollbar-thumb,
+.encodelab__textarea::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+.encodelab__panel::-webkit-scrollbar-thumb:hover,
+.encodelab__card-value::-webkit-scrollbar-thumb:hover,
+.encodelab__textarea::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+  background-clip: content-box;
+}
+
+.encodelab__panel::-webkit-scrollbar-track,
+.encodelab__card-value::-webkit-scrollbar-track,
+.encodelab__textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --- 窗口较矮时收紧 ------------------------------------------------------
+ *
+ * 最小窗口 960×560。这个高度下标题下那句说明可以先收起来，
+ * 让工具条与结果区拿到更多高度。
+ */
+
+@media (max-height: 660px) {
+  .encodelab {
+    padding: 14px 20px 0;
+  }
+
+  .encodelab__subtitle {
+    display: none;
+  }
+
+  .encodelab__toolbar {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+
+  .encodelab__toolbar-row {
+    gap: 10px;
+  }
+
+  .encodelab__footer {
+    padding: 8px 0 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .encodelab__body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(200px, 1fr);
+    overflow: auto;
+  }
+}
+
+/* === 深色模式 ============================================================
+ *
+ * 宿主在 <html> 上切换 .dark。宿主那张把工具类名映射到深色取值的全局表管不到插件 ——
+ * 插件的类名不在宿主构建期的扫描范围内。因此下面每一条都必须自己写。
+ */
+
+:root.dark .encodelab {
+  --encodelab-line: #2c3242;
+  --encodelab-line-soft: #252a38;
+  --encodelab-surface: #1a1e2b;
+  --encodelab-surface-sunken: #11141d;
+  --encodelab-text: #f3f4f6;
+  --encodelab-text-soft: #9ca3af;
+  --encodelab-text-mid: #d1d5db;
+}
+
+:root.dark .encodelab__input {
+  color: var(--encodelab-text);
+  background: #11141d;
+}
+
+:root.dark .encodelab__input::placeholder,
+:root.dark .encodelab__textarea::placeholder {
+  color: #6b7280;
+}
+
+:root.dark .encodelab__input:hover {
+  border-color: #3b4252;
+}
+
+:root.dark .encodelab__input:focus {
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 3px rgb(from var(--accent-400, #818cf8) r g b / 0.22);
+}
+
+:root.dark .encodelab__notice {
+  color: #a7f3d0;
+  background: #0d2a24;
+  border-color: #14532d;
+}
+
+:root.dark .encodelab__notice--warn {
+  color: #fcd34d;
+  background: #2a2312;
+  border-color: #78350f;
+}
+
+:root.dark .encodelab__tool:hover,
+:root.dark .encodelab__direction-button:hover,
+:root.dark .encodelab__option:hover,
+:root.dark .encodelab__direction-button--on,
+:root.dark .encodelab__option--on {
+  color: var(--encodelab-text);
+  background: #222736;
+}
+
+:root.dark .encodelab__tool--on,
+:root.dark .encodelab__tool--on:hover {
+  color: #ffffff;
+  background: var(--accent-600, #4f46e5);
+  border-color: var(--accent-600, #4f46e5);
+}
+
+:root.dark .encodelab__card:hover {
+  border-color: #3b4252;
+}
+
+:root.dark .encodelab__alert {
+  color: #fecaca;
+  background: #2b1416;
+  border-color: #7f1d1d;
+}
+
+:root.dark .encodelab__button {
+  color: var(--encodelab-text-mid);
+  background: #1a1e2b;
+}
+
+:root.dark .encodelab__button:hover:not(:disabled) {
+  background: #222736;
+  border-color: #3b4252;
+}
+
+:root.dark .encodelab__panel::-webkit-scrollbar-thumb,
+:root.dark .encodelab__card-value::-webkit-scrollbar-thumb,
+:root.dark .encodelab__textarea::-webkit-scrollbar-thumb {
+  background: #3b4252;
+  background-clip: content-box;
+}
+
+:root.dark .encodelab__panel::-webkit-scrollbar-thumb:hover,
+:root.dark .encodelab__card-value::-webkit-scrollbar-thumb:hover,
+:root.dark .encodelab__textarea::-webkit-scrollbar-thumb:hover {
+  background: #4b5563;
+  background-clip: content-box;
+}

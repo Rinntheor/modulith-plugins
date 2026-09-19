@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="编码与哈希工具箱">
+  <!-- 方框里一个井号：内容是字节，井号是摘要。两者加起来就是「编码与哈希」。 -->
+  <rect x="2.6" y="3.6" width="18.8" height="16.8" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"/>
+  <path d="M9.4 7.4 8.2 16.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M15.8 7.4 14.6 16.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M6.7 10.5h10.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M6.7 13.5h10.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,26 @@
+{
+  "name": "com.rinntheor.modulith.encode-lab",
+  "displayName": "编码与哈希工具箱",
+  "version": "1.0.0",
+  "description": "Base64、URL、十六进制、HTML 实体、Unicode 转义的互转，SHA 系列与 HMAC 计算，JWT 解码，时间戳互转；全部在本机完成。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/encode-lab",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": ["开发", "效率"],
+  "keywords": ["base64", "url", "hex", "hash", "sha256", "hmac", "jwt", "编码", "哈希"],
+  "engines": {
+    "loopcore": ">=1.0.0"
+  },
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": ["storage"],
+  "sandboxLevel": 1
+}
