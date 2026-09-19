@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="打字练习">
+  <rect x="1.8" y="6.2" width="20.4" height="12.6" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <path d="M5.4 10h1.3M9 10h1.3M12.6 10h1.3M16.2 10h2.4M5.4 13.4h2.4M9.9 13.4h1.3M13.5 13.4h5.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.75"/>
+  <path d="M8 16.6h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <rect x="6.05" y="7.55" width="1.9" height="4.9" rx="0.6" fill="currentColor"/>
+  <path d="M16.6 2.4l1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1z" fill="currentColor" opacity="0.85"/>
+</svg>
