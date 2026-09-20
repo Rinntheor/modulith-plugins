@@ -51,8 +51,15 @@ declare global {
    * **只在插件 bundle 执行期间可用**：`createContext()`、`registerCommand()` 与
    * `onDeactivate()` 都必须在 IIFE 顶层同步调用 —— 它们要归属到"当前正在加载的
    * 插件"，而只有加载期才有确定值。
+   *
+   * 声明成 `var` 而不是 `const`：宿主是往全局对象上**挂属性**来注入的，只有 `var`
+   * 声明同时给出「裸标识符 `Modulith`」和「`globalThis.Modulith`」两种写法（`const`
+   * 在 JS 里不会成为 globalThis 的属性，TS 也据此拒绝 `globalThis.Modulith`）。
+   *
+   * 类型里带 `| undefined` 是如实描述：宿主没注入时它就是没有，插件必须先判空
+   * （见 `src/kanban/env.ts` 的开头）。
    */
-  const Modulith: ModulithHost;
+  var Modulith: ModulithHost | undefined;
 
   interface Window {
     Modulith?: ModulithHost;

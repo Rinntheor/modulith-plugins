@@ -46,6 +46,30 @@ export const GENERATED_BANNER =
   '/* 生成物，请勿手改。源码在 src/<插件>/，改完跑 `pnpm build` */';
 
 /**
+ * 严格模式指令。
+ *
+ * 原文件写的是 `(function () { 'use strict'; ... })()` —— 严格模式。构建链路产出的
+ * 是 `(() => { ... })()`，而**箭头函数不建立自己的严格模式**，它继承外层作用域；
+ * 宿主用 `document.createElement('script')` 注入（经典脚本，不是 module），默认是
+ * 宽松模式。不补这一行，产物就从严格模式掉回宽松模式，而且是**静默**的：给未声明的
+ * 名字赋值会创建全局变量而不是抛错，给只读属性赋值会无声失败，拼错的形参会静默变成
+ * 全局。这类差异不报错，只让行为悄悄变样 —— 所以必须显式补上。
+ *
+ * 它是「指令序言」，必须位于任何**语句**之前。上面的注释不是语句，因此放在这里有效。
+ *
+ * **产物里可能出现两行 `"use strict";`，这是刻意的，别去重。** esbuild 是否自己发一条
+ * 取决于它怎么判定输入模块的类型：源码是 `.ts` 时它不发，是 `.js`（且 package.json 里
+ * `"type": "module"`）时它会发。这条 banner 指令是兜底 —— 保证不管 esbuild 怎么判，
+ * 产物都是严格模式。重复的指令序言合法且无副作用，删掉它则会在 esbuild 不发的那一侧
+ * 静默退回宽松模式。
+ *
+ * 仍然存在的一个差异：经典脚本的顶层 `this` 是 `globalThis`（严格与否都一样），而
+ * ESM 源码的顶层 `this` 是 `undefined`；箭头 IIFE 继承的正是脚本顶层，所以产物里裸的
+ * 顶层 `this` 是 `window`。插件源码不应依赖裸顶层 `this`（对象方法里的 `this` 不受影响）。
+ */
+export const STRICT_DIRECTIVE = '"use strict";';
+
+/**
  * `react` 的接法。
  *
  * esbuild 在 `format: 'iife'` 加 `external` 时会产生 `require("react")`，而 IIFE
@@ -100,25 +124,48 @@ export function bundleTargets(): BundleTarget[] {
 
 /** 编译一个目标，返回产物文本（不写盘） */
 export async function bundleText(target: BundleTarget): Promise<string> {
-  const result = await build({
-    entryPoints: [target.entry],
-    bundle: true,
-    format: 'iife',
-    platform: 'browser',
-    target: 'es2022',
-    write: false,
-    // 不压缩：产物要能被人读（见文件头第 2 条）
-    minify: false,
-    // 保留换行与缩进，便于逐行阅读与 diff
-    charset: 'utf8',
-    jsx: 'automatic',
-    jsxImportSource: 'react',
-    external: ['react', 'react/jsx-runtime'],
-    banner: { js: `${GENERATED_BANNER}\n${REACT_SHIM}` },
-    logLevel: 'silent',
-  });
+  try {
+    const result = await build({
+      entryPoints: [target.entry],
+      bundle: true,
+      format: 'iife',
+      platform: 'browser',
+      target: 'es2022',
+      write: false,
+      // 不压缩：产物要能被人读（见文件头第 2 条）
+      minify: false,
+      // 保留换行与缩进，便于逐行阅读与 diff
+      charset: 'utf8',
+      jsx: 'automatic',
+      jsxImportSource: 'react',
+      external: ['react', 'react/jsx-runtime'],
+      banner: { js: `${GENERATED_BANNER}\n${STRICT_DIRECTIVE}\n${REACT_SHIM}` },
+      logLevel: 'silent',
+    });
 
-  return result.outputFiles[0].text;
+    return result.outputFiles[0].text;
+  } catch (error) {
+    // esbuild 的错误在 `error.errors` 里，直接抛出去只会打印一坨堆栈，
+    // 而真正有用的那行（哪个文件、第几行、什么名字对不上）会被埋掉。
+    const messages = (error as { errors?: EsbuildMessage[] }).errors;
+    if (!messages || messages.length === 0) throw error;
+
+    const detail = messages
+      .map((message) => {
+        const where = message.location
+          ? `${message.location.file}:${message.location.line}`
+          : target.entry;
+        return `    ${where}  ${message.text}`;
+      })
+      .join('\n');
+
+    throw new Error(`构建 plugins/${target.name} 失败：\n${detail}`);
+  }
+}
+
+interface EsbuildMessage {
+  text: string;
+  location?: { file: string; line: number };
 }
 
 function normalize(text: string): string {
