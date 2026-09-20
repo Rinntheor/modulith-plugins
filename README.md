@@ -26,9 +26,14 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ```bash
 node scripts/build.ts          # 打包 + 生成索引
 node scripts/build.ts --check  # 只校验索引与产物是否一致
+npm run typecheck              # 类型检查，只覆盖 src/ 与 types/ 下的 .ts / .tsx
 ```
 
-零依赖，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，不经过编译）。
+**构建脚本本身零依赖**，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，
+不经过编译）—— 手写单文件插件走的就是这条路。仓库里另有三个 devDependency，只服务
+「多文件源码」那条快车道：`esbuild` 负责打包，`typescript` 与 `@types/react` 负责类型
+检查。详见 [src/README.md](src/README.md)。
+
 完整发布步骤见 [docs/发布流程.md](docs/发布流程.md)。
 
 ## 插件是怎么到达用户的

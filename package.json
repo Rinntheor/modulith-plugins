@@ -8,9 +8,12 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
-    "check": "node scripts/build.ts --check"
+    "check": "node scripts/build.ts --check",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "@types/react": "^19.1.8",
+    "esbuild": "^0.28.2",
+    "typescript": "~5.8.3"
   }
 }

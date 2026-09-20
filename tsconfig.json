@@ -1,0 +1,28 @@
+{
+  // 只给 src/ 与 types/ 下的 TypeScript 用。
+  //
+  // 关键一条：`pnpm build` 用 esbuild，它**只擦除类型、不检查类型**。这里定义的才是
+  // 「类型对不对」这件事的唯一标准，靠 `pnpm typecheck` 或编辑器来跑。
+  //
+  // 扩展名决定检不检：`include` 只列了 .ts/.tsx，因此从手写插件逐字搬来的 .js
+  // 模块（见 src/kanban/）不会进类型检查 —— 它们本来就没有类型，报错只会是噪音。
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    // 插件可以写 JSX，构建侧由 esbuild 的 jsx: 'automatic' 处理
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    // 不自动引入 node_modules/@types 下的全局声明：插件运行在宿主的 WebView 里，
+    // 引入 Node 的全局只会让作者以为自己能用 fs、process 之类的东西。
+    // （`import 'react'` 走的是模块解析，不受这条影响。）
+    "types": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "types/**/*.d.ts"]
+}
