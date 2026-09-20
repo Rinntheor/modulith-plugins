@@ -11,24 +11,37 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 
 ```
 .
-├── plugins/            插件源码，一个插件一个目录
+├── plugins/            插件：一个插件一个目录（清单、资源、以及 index.js）
 │   ├── hello/          参考插件：把所有约定示范一遍的最小完整形态
 │   ├── notes/          文本速记：只用 storage 的完整插件
 │   ├── pomodoro/       番茄工作钟：后台计时 + 应用内通知 + 自定义提示音
 │   └── quick-launch/   快捷启动：需要宿主原生能力的一类（process-spawn / filesystem-read）
+├── src/                可选的多文件源码，一个插件一个目录（见 src/README.md）
+│   └── kanban/         看板的源码；它的产物是 plugins/kanban/index.js
+├── types/              插件 API 的类型声明（modulith.d.ts）
 ├── dist/               构建产物 .lcp
 ├── scripts/            打包与索引生成
+├── tsconfig.json       类型检查配置，只覆盖 src/ 与 types/ 下的 .ts / .tsx
 ├── index.json          客户端读取的索引（由脚本生成，勿手工编辑）
 ├── index.json.sig      索引的签名（客户端验签通过才使用索引）
 └── docs/               目录规范与发布流程
 ```
 
+`plugins/<名称>/index.js` 有两个来源，而产物完全一样：**大多数插件是手写的单文件**
+（仓库里没有对应的 `src/`），少数放在 `src/<名称>/` 里、由 `node scripts/build.ts`
+构建出来。两条路并存而不冲突，理由见[目录规范](docs/目录规范.md)第 2 节。
+
 ```bash
 node scripts/build.ts          # 打包 + 生成索引
 node scripts/build.ts --check  # 只校验索引与产物是否一致
+npm run typecheck              # 类型检查，只覆盖 src/ 与 types/ 下的 .ts / .tsx
 ```
 
-零依赖，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，不经过编译）。
+**构建脚本本身零依赖**，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，
+不经过编译）—— 手写单文件插件走的就是这条路。仓库里另有三个 devDependency，只服务
+「多文件源码」那条快车道：`esbuild` 负责打包，`typescript` 与 `@types/react` 负责类型
+检查。详见 [src/README.md](src/README.md)。
+
 完整发布步骤见 [docs/发布流程.md](docs/发布流程.md)。
 
 ## 插件是怎么到达用户的

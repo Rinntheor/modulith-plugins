@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.kanban",
   "displayName": "看板",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "把活儿按「待处理 / 进行中 / 已完成」摆开，卡片可按指针拖动或键盘移动；支持自定义列表、优先级、截止日与速记草稿。",
   "author": {
     "name": "环理论",
