@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.regex-lab",
   "displayName": "正则实验场",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "边写边看匹配、捕获组与替换结果。算不完的表达式会被自动中断，不会把界面拖死。",
   "author": {
     "name": "环理论",
@@ -13,14 +13,40 @@
     "type": "git",
     "url": "https://github.com/Rinntheor/modulith-plugins.git"
   },
-  "categories": ["开发", "效率"],
-  "keywords": ["regex", "regexp", "regular-expression", "开发", "正则"],
+  "categories": [
+    "开发",
+    "效率"
+  ],
+  "keywords": [
+    "regex",
+    "regexp",
+    "regular-expression",
+    "开发",
+    "正则"
+  ],
   "engines": {
     "loopcore": ">=1.0.0"
   },
   "main": "index.js",
   "style": "index.css",
   "icon": "icon.svg",
-  "permissions": ["storage"],
-  "sandboxLevel": 1
+  "permissions": [
+    "storage"
+  ],
+  "sandboxLevel": 1,
+  "contributes": {
+    "modules": [
+      {
+        "id": "regexLab",
+        "name": "正则实验场",
+        "displayName": "正则实验场",
+        "description": "边写边看匹配、捕获组与替换结果",
+        "icon": "icon.svg",
+        "priority": 86
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:regexLab"
+  ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.pomodoro",
   "displayName": "番茄工作钟",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "专注 / 短休息 / 长休息循环计时，时长、轮次、提示音与自动开始全部可调。结束时通过应用内通知提醒。",
   "author": {
     "name": "环理论",
@@ -13,14 +13,41 @@
     "type": "git",
     "url": "https://github.com/Rinntheor/modulith-plugins.git"
   },
-  "categories": ["示例", "效率"],
-  "keywords": ["sample", "pomodoro", "timer", "notification", "demo"],
+  "categories": [
+    "示例",
+    "效率"
+  ],
+  "keywords": [
+    "sample",
+    "pomodoro",
+    "timer",
+    "notification",
+    "demo"
+  ],
   "engines": {
     "loopcore": ">=1.0.0"
   },
   "main": "index.js",
   "style": "index.css",
   "icon": "icon.svg",
-  "permissions": ["storage", "notification", "filesystem-read"],
-  "sandboxLevel": 2
+  "permissions": [
+    "storage",
+    "notification",
+    "filesystem-read"
+  ],
+  "sandboxLevel": 2,
+  "contributes": {
+    "modules": [
+      {
+        "id": "pomodoro",
+        "name": "番茄工作钟",
+        "description": "专注 / 休息循环计时，支持自定义提示音与提醒",
+        "icon": "Timer",
+        "priority": 75
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:pomodoro"
+  ]
 }

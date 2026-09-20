@@ -22,8 +22,26 @@
       ],
       "icon": "plugins/notes/icon.svg",
       "source": "plugins/notes",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "notes-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.notes-1.0.1.lcp",
+            "size": 14504,
+            "sha256": "c36d3e70723c00d2a5c40077a1197c5485cb687f67f897ff7d6f976106b90daa"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "notes-v1.0.0",
@@ -63,8 +81,28 @@
       ],
       "icon": "plugins/pomodoro/icon.svg",
       "source": "plugins/pomodoro",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "pomodoro-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "notification",
+            "filesystem-read"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.pomodoro-1.0.1.lcp",
+            "size": 18330,
+            "sha256": "c3faafef4be5b1ee8baa7e807430c373048721e28e7040ee57cb38e94f5fa368"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "pomodoro-v1.0.0",
@@ -105,8 +143,28 @@
       ],
       "icon": "plugins/quick-launch/icon.svg",
       "source": "plugins/quick-launch",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "quick-launch-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "process-spawn",
+            "filesystem-read"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.modulith.sample.quick-launch-1.0.1.lcp",
+            "size": 23655,
+            "sha256": "617948ed1b43fb17df7bf815ffc496ea2910a823245b849319ac514e9ef1103f"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "quick-launch-v1.0.0",
@@ -151,8 +209,26 @@
       ],
       "icon": "plugins/color-lab/icon.svg",
       "source": "plugins/color-lab",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "color-lab-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.color-lab-1.0.1.lcp",
+            "size": 20477,
+            "sha256": "e7e3a7e288be23c9f898ada78df1bdaf20a91a2b538c83edd694982078213f3a"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "color-lab-v1.0.0",
@@ -196,8 +272,26 @@
       ],
       "icon": "plugins/encode-lab/icon.svg",
       "source": "plugins/encode-lab",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "encode-lab-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.encode-lab-1.0.1.lcp",
+            "size": 21960,
+            "sha256": "9f4d64662ddd8d746282fea4ddf32d7dfeab920314327eadf110240aca6872f0"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "encode-lab-v1.0.0",
@@ -234,8 +328,26 @@
       ],
       "icon": "plugins/hello/icon.svg",
       "source": "plugins/hello",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "hello-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.hello-1.0.1.lcp",
+            "size": 6588,
+            "sha256": "157283a58ef8946d94fa2a070f60055002bc532233dc9c4f97825900fc85e20f"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "hello-v1.0.0",
@@ -274,8 +386,29 @@
       ],
       "icon": "plugins/kanban/icon.svg",
       "source": "plugins/kanban",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "kanban-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "plugin-communicate",
+            "notification"
+          ],
+          "kinds": [
+            "modules",
+            "commands"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.kanban-1.0.1.lcp",
+            "size": 44680,
+            "sha256": "8fd8b26bd312d6f87b17d6b12ab490d4cbfe68873a1db1e096b8958021ccd73e"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "kanban-v1.0.0",
@@ -317,8 +450,26 @@
       ],
       "icon": "plugins/regex-lab/icon.svg",
       "source": "plugins/regex-lab",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "regex-lab-v1.0.1",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.regex-lab-1.0.1.lcp",
+            "size": 34429,
+            "sha256": "3ec61a9a2219880d51e656cf76c733e7da2514e9725e06405fecaa455b0f794e"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "regex-lab-v1.0.0",
@@ -357,8 +508,26 @@
       ],
       "icon": "plugins/typing-practice/icon.svg",
       "source": "plugins/typing-practice",
-      "latest": "1.1.1",
+      "latest": "1.1.2",
       "versions": [
+        {
+          "version": "1.1.2",
+          "tag": "typing-practice-v1.1.2",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.typing-practice-1.1.2.lcp",
+            "size": 43605,
+            "sha256": "d51a23e25ab2a37200fde75b02e8b41e63e1ba791df472b0faa776d53ac568e5"
+          }
+        },
         {
           "version": "1.1.1",
           "tag": "typing-practice-v1.1.1",
