@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 import { PACKAGE_IGNORE, readManifest, validatePlugin, type PluginManifest } from './manifest.ts';
 import { createZip } from './zip.ts';
+import { bundleAll, orphanedOutputs } from './bundle.ts';
 
 const SCHEMA_VERSION = 1;
 
@@ -478,8 +479,47 @@ function reportDropped(previous: Index | null, next: Index): void {
 // 主流程
 // ============================================================
 
-function main(): number {
+async function main(): Promise<number> {
   const checkOnly = process.argv.includes('--check');
+
+  // ---- 0. 先把多文件源码构建成单文件 IIFE ----
+  //
+  // 放在**最前面**：包里的 `index.js` 是产物，后面所有校验（文件哈希、索引记录）
+  // 都必须基于构建之后的内容。顺序反了会出现最难查的一种状态 —— 索引对得上、
+  // 而包里的代码是旧的。
+  //
+  // 没有 `src/<插件>/` 的插件会被跳过：它们仍然是手写单文件，这条链路可选。
+  const bundles = await bundleAll({ check: checkOnly });
+  const stale = bundles.filter((report) => report.changed);
+
+  if (checkOnly && stale.length > 0) {
+    console.error('插件产物与源码不一致：\n');
+    for (const report of stale) {
+      console.error(`  ✘ plugins/${report.name}/index.js 需要重新构建`);
+    }
+    console.error(`\n共 ${stale.length} 个。改完源码后跑一次 pnpm build。`);
+    return 1;
+  }
+
+  if (bundles.length > 0) {
+    console.log(
+      checkOnly
+        ? `src/ 下的 ${bundles.length} 个插件产物均为最新`
+        : `已从 src/ 构建 ${bundles.length} 个插件的产物`
+    );
+  }
+
+  // 源码删了、产物还在：它会以一个"没有源码的构建产物"继续出现在索引里，
+  // 而下次有人想改它时才会发现无从下手。
+  const orphans = orphanedOutputs();
+  if (orphans.length > 0) {
+    console.error('这些目录里有构建产物，但没有对应的源码：\n');
+    for (const name of orphans) {
+      console.error(`  ✘ plugins/${name}（src/${name}/ 不存在，产物还在）`);
+    }
+    console.error('\n删掉它的 index.js，或者把源码放回 src/。');
+    return 1;
+  }
 
   if (!existsSync(PLUGINS_DIR)) {
     console.error(`找不到插件目录：${PLUGINS_DIR}`);
@@ -635,4 +675,4 @@ function runCheck(fresh: readonly FreshPlugin[]): number {
   return 0;
 }
 
-process.exit(main());
+process.exit(await main());

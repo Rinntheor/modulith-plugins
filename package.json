@@ -9,5 +9,8 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "check": "node scripts/build.ts --check"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }
