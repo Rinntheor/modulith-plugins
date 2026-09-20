@@ -35,6 +35,18 @@ export interface PluginManifest {
   iconSvg?: string;
   permissions?: string[];
   sandboxLevel?: number;
+  /**
+   * 贡献点与激活事件。
+   *
+   * 本仓库对它们**只做形状检查**（是不是数组），成员资格由宿主决定 —— 与权限名单
+   * 同理：在这里再维护一份"宿主认识哪些贡献点"就是同一份名单的第二个副本，必然漂移。
+   *
+   * 它们的实际用途是**派生索引里的 `kinds` / `background`**（见 build.ts）。
+   * 那是市场给**未安装**插件分级时的唯一依据：索引里没有形态，市场就只能显示
+   * 「形态未知」—— 一个装完才知道会不会占侧边栏的插件，用户没法判断要不要装。
+   */
+  contributes?: Record<string, unknown>;
+  activationEvents?: string[];
 }
 
 /** 仓库要求每个插件都提供的文件（应用本身不强制，见 docs/目录规范.md） */

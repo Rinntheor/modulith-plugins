@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.notes",
   "displayName": "文本速记",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "把想到的事写进上面那个框，点保存就收进下面的列表。可复制、修改、删除，不必先想标题。",
   "author": {
     "name": "环理论",
@@ -13,14 +13,38 @@
     "type": "git",
     "url": "https://github.com/Rinntheor/modulith-plugins.git"
   },
-  "categories": ["示例", "效率"],
-  "keywords": ["sample", "notes", "memo", "demo"],
+  "categories": [
+    "示例",
+    "效率"
+  ],
+  "keywords": [
+    "sample",
+    "notes",
+    "memo",
+    "demo"
+  ],
   "engines": {
     "loopcore": ">=1.0.0"
   },
   "main": "index.js",
   "style": "index.css",
   "icon": "icon.svg",
-  "permissions": ["storage"],
-  "sandboxLevel": 1
+  "permissions": [
+    "storage"
+  ],
+  "sandboxLevel": 1,
+  "contributes": {
+    "modules": [
+      {
+        "id": "notes",
+        "name": "文本速记",
+        "description": "随手记下想法、待办与片段",
+        "icon": "NotebookPen",
+        "priority": 70
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:notes"
+  ]
 }

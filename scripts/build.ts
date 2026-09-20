@@ -90,6 +90,18 @@ interface IndexVersion {
   tag: string;
   engines: { loopcore: string };
   permissions: string[];
+  /**
+   * 这个版本贡献了哪些种类。
+   *
+   * **由清单派生，不是作者填写。** 形态决定"这个插件会不会占用户侧边栏一行"，
+   * 是用户的判断依据 —— 与权限风险同理，由被审查的一方提供的信息不可信。
+   *
+   * 放在**版本级**而不是插件级：形态可以随版本变化（例如纯命令插件长出了界面），
+   * 位置与 `permissions` 一致。
+   */
+  kinds?: string[];
+  /** 声明了 `onStartup`：应用可用之后它就会开始工作 */
+  background?: boolean;
   package: IndexPackage;
 }
 
@@ -239,6 +251,27 @@ function packagePlugin(dir: string): Buffer {
   return createZip(files.map((rel) => ({ name: rel, data: readFileSync(resolve(dir, rel)) })));
 }
 
+/**
+ * 宿主会消费的贡献点名称。
+ *
+ * **这是一份跨仓库契约**：名单必须与宿主 `src/services/pluginContributions.ts` 的
+ * `CONTRIBUTION_KINDS` 逐字一致。不一致的后果不是报错，而是市场把某个插件归错档 ——
+ * 那种错没人会报 bug，只会有人默默觉得"这个分类不太对"。
+ *
+ * 不做成"从清单里读到什么就写什么"：那样一个拼错的键会被原样写进索引，宿主既不认识
+ * 也不会报错。白名单让拼错变成一次**派生不出来**（该种类缺席），是可观察的。
+ */
+const CONTRIBUTION_KINDS = ['modules', 'commands', 'settings', 'contextMenus'] as const;
+
+/** 清单里实际声明了内容的贡献点（空数组合"没声明"等价） */
+function contributionKinds(manifest: PluginManifest): string[] {
+  const contributes = manifest.contributes ?? {};
+  return CONTRIBUTION_KINDS.filter((kind) => {
+    const list = contributes[kind];
+    return Array.isArray(list) && list.length > 0;
+  });
+}
+
 function packOne(dirName: string): FreshPlugin {
   const dir = join(PLUGINS_DIR, dirName);
   const manifest = readManifest(dir);
@@ -252,6 +285,12 @@ function packOne(dirName: string): FreshPlugin {
     throw new Error(`${manifest.name}: 两次打包结果不一致，zip 输出不是确定性的`);
   }
 
+  // 形态信息：两个字段都只在**有内容时**写入。
+  // 写 `"kinds": []` 与"没有这个字段"在宿主侧含义不同 —— 前者会被解读为
+  // "这个插件声明了贡献点但一个都没生效"，而我们要表达的是"老插件没有这个信息"。
+  const kinds = contributionKinds(manifest);
+  const background = (manifest.activationEvents ?? []).includes('onStartup');
+
   return {
     dirName,
     manifest,
@@ -261,6 +300,8 @@ function packOne(dirName: string): FreshPlugin {
       tag: `${dirName}-v${manifest.version}`,
       engines: { loopcore: manifest.engines?.loopcore ?? '*' },
       permissions: [...(manifest.permissions ?? [])],
+      ...(kinds.length > 0 ? { kinds } : {}),
+      ...(background ? { background: true } : {}),
       package: {
         path: `dist/${manifest.name}-${manifest.version}.lcp`,
         size: buffer.length,
