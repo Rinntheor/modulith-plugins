@@ -1,0 +1,27 @@
+{
+  // **构建脚本**的类型配置 —— 与根 tsconfig.json 分开，理由见那一份里的说明：
+  // 脚本要用 Node 的全局（`process`、`Buffer`、`fs`），而插件源码刻意不要。
+  //
+  // 两份配置各查各的，因此「给脚本加 Node 类型」不会同时把 `process.exit()`
+  // 在 `src/` 里变成合法写法。
+  "compilerOptions": {
+    "target": "ES2022",
+    // 脚本在 Node 里跑，不需要 DOM
+    "lib": ["ES2022"],
+    // Node 24 支持 `.ts` 的**类型擦除**执行（`node scripts/build.ts`），
+    // 因此脚本之间用带扩展名的相对导入（`./manifest.ts`）—— 这也让
+    // allowImportingTsExtensions 成为必须
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    // 与根配置相反：这里**要** Node 的类型
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts"]
+}

@@ -98,6 +98,30 @@ declare global {
      */
     createContext(): ModulithContext;
 
+    /**
+     * **显式引导入口**：宿主把插件身份与数据作为**参数**交进去，而不是让插件去读
+     * "当前正在加载哪个插件"这个隐式全局。
+     *
+     * ```ts
+     * Modulith.run(function (bootstrap) {
+     *   const ctx = bootstrap.ctx;          // 与 Modulith.createContext() 等价
+     *   const saved = bootstrap.settings;    // 本插件设置的当前值快照（只读）
+     *   if (bootstrap.capabilities.context.includes('events')) { ... }
+     *   Modulith.registerModule({ ... });    // 行为与在顶层调用完全一致
+     * });
+     * ```
+     *
+     * 为什么用它：`createContext()` 能工作，靠的是"当前正在加载哪个插件"这个隐式全局 ——
+     * 而插件挪进独立进程（沙箱化）之后那个全局不复存在。显式传参是唯一跨得过去的形态，
+     * 因此这是新插件应当采用的入口。
+     *
+     * **回调在 bundle 执行期同步跑完。** 它不是"延迟到激活事件再执行"的生命周期钩子 ——
+     * 什么时候执行整段 bundle，仍然由清单的 `activationEvents` 决定。
+     *
+     * 回调的返回值**被忽略**：贡献仍然通过 `registerModule()` / `registerCommand()` 登记。
+     */
+    run(entry: (bootstrap: PluginBootstrap) => void): void;
+
     /** 把一个动作注册进全局搜索框。同样只能在顶层调用 */
     registerCommand(command: PluginCommandRegistration): void;
 
@@ -136,6 +160,45 @@ declare global {
      * 真正决定一段代码能不能跑的，是这里列出的东西。
      */
     readonly capabilities: ModulithCapabilities;
+  }
+
+  // ============================================================
+  // 引导数据（`Modulith.run` 的参数）
+  // ============================================================
+
+  /**
+   * 宿主交给插件的一份**只读快照**。
+   *
+   * 全部字段都是值（字符串、数字、纯对象），因此它可以跨进程传递 —— 这正是
+   * `Modulith.run` 与 `createContext()` 的区别所在。
+   */
+  interface PluginBootstrap {
+    /** 插件 ID，等于清单的 `name` */
+    readonly pluginId: string;
+    /** 插件版本，等于清单的 `version` */
+    readonly pluginVersion: string;
+    /** 宿主版本 */
+    readonly hostVersion: string;
+    /** 本插件的清单（只读） */
+    readonly manifest: PluginManifest | undefined;
+    /** 本次执行由什么触发；旧式插件为 `'legacy'` */
+    readonly activationEvent: string | null;
+
+    /** 宿主能力表。**特性探测用它**，不要比较版本号 */
+    readonly capabilities: ModulithCapabilities;
+
+    /**
+     * 本插件自己声明的设置项的**当前值快照**。
+     *
+     * 是快照，不是读取器：它在 bundle 执行之前取好，之后**不会**跟着变化。
+     * 需要跟进变更就用 `ctx.settings.onChange`。
+     *
+     * 需要清单声明 `storage` 权限；未声明时是空对象。
+     */
+    readonly settings: Readonly<Record<string, unknown>>;
+
+    /** 本插件的上下文。与 `Modulith.createContext()` 返回的是同一个对象 */
+    readonly ctx: ModulithContext;
   }
 
   // ============================================================
@@ -191,6 +254,8 @@ declare global {
     readonly fileDrop: PluginFileDrop;
     /** 导入音频文件。**需要 `filesystem-read` 权限** */
     readonly audio: PluginAudio;
+    /** 读写系统剪贴板。**需要 `clipboard` 权限** */
+    readonly clipboard: PluginClipboard;
     /** 读插件自己声明的设置项。**需要 `storage` 权限** */
     readonly settings: PluginSettingsAPI;
     /** 收尾登记。功能型插件的必备项 */
@@ -323,6 +388,50 @@ declare global {
     /** 形如 `data:audio/mpeg;base64,...`，可直接交给 `new Audio(...)` */
     dataUrl: string;
     bytes: number;
+  }
+
+  // ---- clipboard ----
+
+  /**
+   * 读写系统剪贴板。**需要 `clipboard` 权限。**
+   *
+   * ============================================================
+   * 强制程度是「前端」，这一点值得知道
+   * ============================================================
+   *
+   * 剪贴板是浏览器 API：`navigator.clipboard` 在页面脚本里本来就可达，
+   * 因此宿主**无法**真正拦住一个铁了心要绕过的插件。
+   *
+   * 与其它能力相比，这一项的实际保障要弱一些 —— 它管住的是"插件按约定走宿主通道"，
+   * 而不是"插件拿不到剪贴板"。宿主仍然值得提供它：调用会被记录、行为统一，
+   * 而且权限列表里这一项是**真的会拦下忘记声明的插件**的。
+   *
+   * 需要真正的强隔离，只能等插件挪进独立进程（见
+   * `docs/08-规划/插件架构与API-v1.5范围.md`）。
+   */
+  interface PluginClipboard {
+    /** 权限已声明**且**当前环境提供剪贴板接口。用它降级，不要靠 try/catch */
+    isAvailable(): boolean;
+
+    /**
+     * 读取剪贴板文本。
+     *
+     * **可能失败，而且失败不是缺陷**：浏览器通常要求页面处于聚焦状态，
+     * 剪贴板也可能被别的程序独占。因此调用方应当准备回退路径，
+     * 而不是把拒绝当成致命错误。未声明权限时返回空串并记录一次警告。
+     */
+    readText(): Promise<string>;
+
+    /**
+     * 写入剪贴板文本。
+     *
+     * ⚠️ **这会静默替换用户剪贴板里的内容** —— 用户可能正打算粘贴别的东西。
+     * 它不像通知那样显眼，因此别在用户没主动触发的时候调用它。
+     *
+     * 未声明权限时**静默返回**（记录一次警告）。真的失败时抛错，消息里
+     * 会说明原因（通常是"需要用户手势"或"页面未聚焦"）。
+     */
+    writeText(text: string): Promise<void>;
   }
 
   // ---- settings ----

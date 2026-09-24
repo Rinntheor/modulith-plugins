@@ -8,10 +8,14 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
+    "dev": "node scripts/watch.ts",
     "check": "node scripts/build.ts --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:scripts": "tsc --noEmit -p scripts/tsconfig.json",
+    "typecheck:all": "npm run typecheck && npm run check:scripts"
   },
   "devDependencies": {
+    "@types/node": "^24.13.6",
     "@types/react": "^19.1.8",
     "esbuild": "^0.28.2",
     "typescript": "~5.8.3"

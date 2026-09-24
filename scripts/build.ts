@@ -5,7 +5,7 @@
 //   node scripts/build.ts --check    只校验，不写任何文件；发现问题时以非零码退出
 //
 // 索引的格式定义在**应用仓库**：
-//   docs/08-规划/插件生态设计.md 第 4 节
+//   docs/02-开发指南/插件开发/清单文件参考.md
 // 本脚本是该格式的生产方。格式只有那一份定义 —— 在这里再抄一份说明必然漂移。
 
 import { createHash } from 'node:crypto';

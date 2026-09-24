@@ -30,6 +30,21 @@
 // 2. **不压缩。** 产物是分发的，但它同时是**要被人读的代码**：插件的审核就是
 //    人工阅读（见「已知问题」里关于共享 JS 上下文的那几条）。压缩会把这件事
 //    从"读一遍"变成"读不了"。
+//
+// ============================================================
+// 为什么产物里带 inline sourcemap
+// ============================================================
+//
+// 产物是**拼**出来的单文件：源码拆成十几个模块，编译后全在一个文件里，行号对不上。
+// 插件里抛的异常、以及宿主日志里记下的插件堆栈，给出的都是产物的行号 —— 而插件作者
+// 手上只有 src/ 下的源码。没有映射，这条线索等于没有。
+//
+// 选 `inline` 而不是外链 `.js.map`：宿主把插件当作普通脚本注入，不会去解析
+// `//# sourceMappingURL=` 指向的旁文件；而 `.lcp` 是 zip，多一个文件就要多一条
+// 打包与校验的路径。inline 把映射塞在同一个文件里，**对分发零影响**。
+//
+// 代价是产物体积变大（base64 后的映射通常比代码本身大）。这里接受它：产物不压缩
+// 本来就有体积，而"能不能调"比"小几 KB"重要得多。
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -136,6 +151,11 @@ export async function bundleText(target: BundleTarget): Promise<string> {
       minify: false,
       // 保留换行与缩进，便于逐行阅读与 diff
       charset: 'utf8',
+      // 行号还原：见文件头。inline 因此不产生额外文件
+      sourcemap: 'inline',
+      // 映射里带上源码内容，这样宿主 DevTools 里能直接看到原始 .ts/.tsx，
+      // 而不是一个「找不到源文件」的占位
+      sourcesContent: true,
       jsx: 'automatic',
       jsxImportSource: 'react',
       external: ['react', 'react/jsx-runtime'],
@@ -183,9 +203,17 @@ export interface BundleReport {
  *
  * `check` 为真时**不写任何文件**，只报告哪些产物与源码不一致 —— 与
  * `build.ts --check` 的整体约定一致：校验不产生副作用。
+ *
+ * `dryRun` 与 `check` 的区别只在调用方想表达什么：`check` 是"我在校验"，
+ * `dryRun` 是"我在做准备，但这次先别动工作区"。watch 的启动阶段用后者 ——
+ * 开一个监听不该把工作树弄脏。
  */
-export async function bundleAll(options: { check: boolean }): Promise<BundleReport[]> {
+export async function bundleAll(options: {
+  check: boolean;
+  dryRun?: boolean;
+}): Promise<BundleReport[]> {
   const reports: BundleReport[] = [];
+  const readOnly = options.check || options.dryRun === true;
 
   for (const target of bundleTargets()) {
     const text = await bundleText(target);
@@ -194,7 +222,7 @@ export async function bundleAll(options: { check: boolean }): Promise<BundleRepo
       : null;
     const changed = current === null || normalize(current) !== normalize(text);
 
-    if (!options.check && changed) {
+    if (!readOnly && changed) {
       // 目录由插件自己维护（manifest / css / icon 都在那里），但产物可能还没有
       if (!existsSync(join(PLUGINS_DIR, target.name))) {
         throw new Error(
