@@ -21,6 +21,8 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ├── types/              插件 API 的类型声明（modulith.d.ts）
 ├── dist/               构建产物 .lcp
 ├── scripts/            打包与索引生成
+│   ├── tsconfig.json   脚本自己的类型配置（带 Node 类型，与根部那份分开）
+│   └── watch.ts        npm run dev 的实现
 ├── tsconfig.json       类型检查配置，只覆盖 src/ 与 types/ 下的 .ts / .tsx
 ├── index.json          客户端读取的索引（由脚本生成，勿手工编辑）
 ├── index.json.sig      索引的签名（客户端验签通过才使用索引）
@@ -28,19 +30,24 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ```
 
 `plugins/<名称>/index.js` 有两个来源，而产物完全一样：**大多数插件是手写的单文件**
-（仓库里没有对应的 `src/`），少数放在 `src/<名称>/` 里、由 `node scripts/build.ts`
-构建出来。两条路并存而不冲突，理由见[目录规范](docs/目录规范.md)第 2 节。
+（仓库里没有对应的 `src/`），少数放在 `src/<名称>/` 里、由构建脚本编译出来。
+两条路并存而不冲突，理由见[目录规范](docs/目录规范.md)第 2 节。
 
 ```bash
-node scripts/build.ts          # 打包 + 生成索引
-node scripts/build.ts --check  # 只校验索引与产物是否一致
+npm run build                  # 打包 + 生成索引
+npm run dev                    # 监听 src/，改完自动重建（并先查一遍类型）
+npm run check                  # 只校验索引与产物是否一致
 npm run typecheck              # 类型检查，只覆盖 src/ 与 types/ 下的 .ts / .tsx
+npm run check:scripts          # 构建脚本自身的类型检查（这份带 Node 类型）
 ```
 
+`npm run dev` 只保证**磁盘上的产物永远是最新的**；宿主侧仍需让插件重新加载才会生效。
+宿主的开发模式热重载是 v1.5 的目标之一，尚未实现。
+
 **构建脚本本身零依赖**，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，
-不经过编译）—— 手写单文件插件走的就是这条路。仓库里另有三个 devDependency，只服务
+不经过编译）—— 手写单文件插件走的就是这条路。仓库里的 devDependency 只服务
 「多文件源码」那条快车道：`esbuild` 负责打包，`typescript` 与 `@types/react` 负责类型
-检查。详见 [src/README.md](src/README.md)。
+检查，`@types/node` 只给构建脚本自己用。详见 [src/README.md](src/README.md)。
 
 完整发布步骤见 [docs/发布流程.md](docs/发布流程.md)。
 
@@ -80,9 +87,14 @@ npm run typecheck              # 类型检查，只覆盖 src/ 与 types/ 下的
 
 索引格式的**设计说明**在应用仓库里，只有那一份：
 
-[插件生态设计](https://github.com/Rinntheor/modulith-desktop/blob/main/docs/08-规划/插件生态设计.md) 第 4 节
+[插件架构与 API：v1.5.0 范围](https://github.com/Rinntheor/modulith-desktop/blob/main/docs/08-规划/插件架构与API-v1.5范围.md)
+与 [清单文件参考](https://github.com/Rinntheor/modulith-desktop/blob/main/docs/02-开发指南/插件开发/清单文件参考.md)
 
-注意那一册的性质与其他册不同：**它描述目标形态，不描述当前代码行为**（应用仓库 `docs/README.md` 对该册有明确声明）。因此要确认「现在真正解析的是什么」，以这两处实现为准 —— 生产方 `scripts/build.ts`（本仓库），消费方 `src/services/pluginMarket.ts` 与 `src/config/pluginRegistry.ts`（应用仓库）。
+> 早先这里指向 `docs/08-规划/插件生态设计.md`。**那份文件已在 1.3.2 周期删除**，
+> 引用因此失效 —— 按仓库自己的规矩，失效的引用要么修好要么删掉，不能留着。
+
+要确认「现在真正解析的是什么」，以这两处实现为准 —— 生产方 `scripts/build.ts`（本仓库），
+消费方 `src/services/pluginMarket.ts` 与 `src/config/pluginRegistry.ts`（应用仓库）。
 
 在这里再抄一份格式说明必然会与它们漂移，因此本文不重复。索引由构建脚本生成，**不手工维护** ——
 手工维护的错误模式是可预测的：改了清单版本忘了改索引、算了哈希忘了更新、删了插件忘了

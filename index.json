@@ -386,8 +386,29 @@
       ],
       "icon": "plugins/kanban/icon.svg",
       "source": "plugins/kanban",
-      "latest": "1.0.2",
+      "latest": "1.0.3",
       "versions": [
+        {
+          "version": "1.0.3",
+          "tag": "kanban-v1.0.3",
+          "engines": {
+            "loopcore": ">=1.0.0"
+          },
+          "permissions": [
+            "storage",
+            "plugin-communicate",
+            "notification"
+          ],
+          "kinds": [
+            "modules",
+            "commands"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.kanban-1.0.3.lcp",
+            "size": 105610,
+            "sha256": "96eb123404ac9dffd07d3ad6537148953c3500f3fe9ed85715a5c534f6059b5c"
+          }
+        },
         {
           "version": "1.0.2",
           "tag": "kanban-v1.0.2",
