@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.typing-practice",
   "displayName": "打字练习",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "逐字符判定的打字练习：中英文语料可选，实时显示速度与准确率，记录历史与走势，并能看出自己常打错哪些字。",
   "author": {
     "name": "环理论",
@@ -24,7 +24,7 @@
     "打字"
   ],
   "engines": {
-    "loopcore": ">=1.0.0"
+    "modulith": ">=1.2.0"
   },
   "main": "index.js",
   "style": "index.css",
@@ -32,7 +32,6 @@
   "permissions": [
     "storage"
   ],
-  "sandboxLevel": 1,
   "contributes": {
     "modules": [
       {

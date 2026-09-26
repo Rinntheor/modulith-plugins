@@ -89,7 +89,7 @@ interface IndexPackage {
 interface IndexVersion {
   version: string;
   tag: string;
-  engines: { loopcore: string };
+  engines: { modulith: string };
   permissions: string[];
   /**
    * 这个版本贡献了哪些种类。
@@ -299,7 +299,7 @@ function packOne(dirName: string): FreshPlugin {
     version: {
       version: manifest.version,
       tag: `${dirName}-v${manifest.version}`,
-      engines: { loopcore: manifest.engines?.loopcore ?? '*' },
+      engines: { modulith: manifest.engines?.modulith ?? '*' },
       permissions: [...(manifest.permissions ?? [])],
       ...(kinds.length > 0 ? { kinds } : {}),
       ...(background ? { background: true } : {}),

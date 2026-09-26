@@ -1,13 +1,21 @@
 /* plugins/hello/index.css
  *
- * 类名统一带 `hello__` 前缀，避免与宿主或其他插件冲突。
+ * 类名统一带 `hello__` 前缀。
  *
- * **不使用 Tailwind 工具类。** Tailwind 是在构建宿主时扫描宿主源码生成类名的，
- * 插件在运行时才注入，它写的 `bg-white` 不在那次扫描范围内，因此不会生成对应规则 ——
- * 类名存在，但没有任何样式生效。
+ * ============================================================
+ * 这个插件跑在**自己的 webview** 里，因此这里的样式是自足的
+ * ============================================================
  *
- * 颜色复用宿主的 `--accent-*` 变量，并带兜底值：万一变量名变化，也只是颜色不同，
- * 不会退化成没有背景色的按钮。
+ * 旧写法复用宿主的 `--accent-*` 变量、并靠宿主在 `:root` 上切换的 `.dark` 类做深色。
+ * 沙箱里两者都不存在 —— 插件是一个**独立文档**，宿主那个页面上的 CSS 自定义属性与
+ * 类名都到不了这里。
+ *
+ * 因此深色用 `prefers-color-scheme` 判断（它由浏览器给出，与宿主无关），
+ * 颜色自己带。代价是插件不再自动跟随宿主的强调色；换来的是它不再依赖宿主的内部
+ * 实现 —— 宿主改一套配色变量不会让插件看起来坏掉。
+ *
+ * **不使用 Tailwind 工具类**：那些类名是构建宿主时扫描宿主源码生成的，
+ * 插件在运行时才加载，写的 `bg-white` 不在那次扫描范围内，不会生成对应规则。
  */
 
 .hello {
@@ -16,6 +24,7 @@
 }
 
 .hello__title {
+  margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: #111827;
@@ -42,30 +51,36 @@
   font-size: 14px;
   font-weight: 500;
   color: #fff;
-  background: var(--accent-600, #4f46e5);
+  background: #4f46e5;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
-.hello__button:hover {
-  background: var(--accent-500, #6366f1);
+.hello__button:hover:not(:disabled) {
+  background: #6366f1;
 }
 
-.hello__button:active {
+.hello__button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-/* 深色模式。宿主在 <html> 上切换 .dark */
-:root.dark .hello__title {
-  color: #f3f4f6;
+.hello__button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
-:root.dark .hello__count {
-  color: #d1d5db;
-}
+@media (prefers-color-scheme: dark) {
+  .hello__title {
+    color: #f3f4f6;
+  }
 
-:root.dark .hello__muted {
-  color: #9ca3af;
+  .hello__count {
+    color: #d1d5db;
+  }
+
+  .hello__muted {
+    color: #9ca3af;
+  }
 }

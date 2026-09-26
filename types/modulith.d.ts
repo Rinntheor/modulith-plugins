@@ -156,7 +156,7 @@ declare global {
     /**
      * 宿主能力表。**用它做特性探测**，而不是比较 `version` 字符串。
      *
-     * `engines.loopcore` 只表达「我要求宿主至少多新」，而且只提示、不阻断；
+     * `engines.modulith` 只表达「我要求宿主至少多新」，而且只提示、不阻断；
      * 真正决定一段代码能不能跑的，是这里列出的东西。
      */
     readonly capabilities: ModulithCapabilities;
@@ -236,6 +236,23 @@ declare global {
 
     /** 键值存储。**需要 `storage` 权限** */
     readonly storage: PluginStorage;
+    /**
+     * 插件私有文件目录。**需要 `plugin-data` 权限**。
+     *
+     * 与 `storage` 的分工：那个是一键一个 JSON（单值 1 MB、总量 8 MB），适合配置与
+     * 小状态；这个是**目录**，能建子目录、能存二进制（单文件 256 MB、总量 1 GiB），
+     * 适合文档、图片、缓存。
+     *
+     * 路径一律相对数据根，语义是 chroot —— 前导 `/` 没有特殊含义，`/a` 与 `a` 等价。
+     * `..`、盘符、以及指向目录之外的符号链接都会被宿主拒绝。
+     */
+    readonly dataDir: PluginDataDir;
+    /**
+     * 结构化数据：每插件一个 SQLite 文件。**需要 `plugin-data` 权限**。
+     *
+     * 前两层（`storage` / `dataDir`）装不下**查询** —— 这个能。
+     */
+    readonly db: PluginDb;
     /** HTTP 请求。**需要 `network` / `network-external` 权限** —— 见下面的说明 */
     readonly http: PluginHttp;
     /** 日志。除控制台外还写进宿主的日志文件 */
@@ -260,6 +277,98 @@ declare global {
     readonly settings: PluginSettingsAPI;
     /** 收尾登记。功能型插件的必备项 */
     readonly disposables: PluginDisposables;
+  }
+
+  // ---- dataDir ----
+
+  /**
+   * 插件私有文件目录（`ctx.dataDir`）。
+   *
+   * 所有路径都相对插件的数据根：`''` 是根，`'notes/2026/a.md'` 是子路径。
+   * **写入不会自动建父目录** —— 先 `mkdir`，否则会失败。
+   */
+  interface PluginDataDir {
+    /**
+     * 数据目录现在能不能用。**它不是装饰。**
+     *
+     * 数据放在外置盘或网络盘上时，"盘没插"是一个真实状态；那时读出来是空的，
+     * 而"空"与"还没有数据"看起来一模一样。写之前先问一次，为假时明确告诉用户
+     * "数据目录不可用"，而不是让他以为数据丢了。
+     */
+    available(): Promise<boolean>;
+    list(rel?: string): Promise<PluginDataEntry[]>;
+    stat(rel: string): Promise<PluginDataEntry | null>;
+    read(rel: string): Promise<Uint8Array>;
+    readText(rel: string): Promise<string>;
+    write(rel: string, bytes: Uint8Array): Promise<void>;
+    writeText(rel: string, text: string): Promise<void>;
+    /** 建目录（含中间层）。 */
+    mkdir(rel: string): Promise<void>;
+    /** 删除文件或**整棵目录树**。不可撤销。 */
+    remove(rel: string): Promise<void>;
+    /** 当前占用字节数。 */
+    used(): Promise<number>;
+  }
+
+  interface PluginDataEntry {
+    name: string;
+    isDir: boolean;
+    size: number;
+    /** Unix 毫秒 */
+    modified: number;
+  }
+
+  // ---- db ----
+
+  /**
+   * 每插件一个 **SQLite 文件**。**需要 `plugin-data` 权限**。
+   *
+   * 与另外两层数据的分工：`storage` 是一键一个 JSON（单值 1 MB），`dataDir` 是
+   * 文件目录（单文件 256 MB）—— 两者都装不下**查询**。要"按标签筛、按更新时间排、
+   * 取第 3 页"时，只有它能把这些交给 SQLite 做，而不是把所有数据拉进 JS 自己过滤。
+   *
+   * 文件是插件数据目录里的 `plugin.db`，因此 `dataDir.used()` 把它算在内。
+   *
+   * ## 边界（都由宿主侧的 SQLite 引擎执行，不是文本过滤）
+   *
+   * * `ATTACH` / `DETACH` 被拒绝 —— 那是唯一一条能在同一个连接里打开**别的文件**
+   *   的 SQL，也就是唯一一条能跨出插件数据目录的路；
+   * * `PRAGMA max_page_count` / `page_size` / `journal_mode` / `locking_mode` /
+   *   `writable_schema` / `mmap_size` 的**设值**被拒绝（读取照常）；
+   * * `load_extension` 被拒绝 —— 它会在插件里再开一个没有边界的洞；
+   * * 一次调用**只编译一条语句**。多条要一起成功或一起失败，用 `transaction`。
+   *
+   * ## 值的形状
+   *
+   * 参数里对象与数组会被存成 JSON 文本；二进制用 `{ $blob: '<base64>' }` 表示
+   * （**两个方向都是**）—— 裸 base64 字符串与一段恰好是合法 base64 的文本分不开。
+   * 整数与浮点数保持数值类型，`null` 保持 `null`。
+   */
+  interface PluginDb {
+    /**
+     * 查询，返回**对象数组**（列名 → 值）。
+     *
+     * 重名列只保留最后一个 —— 需要全部取值请用 `queryRaw()`，或者给列起别名。
+     *
+     * 参数用 `?1` / `?2` 占位，按数组顺序绑定。**不要自己拼 SQL 字符串**：
+     * 那既是注入面，也会让语句无法被缓存。
+     */
+    query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+    /** 原始形状。重名列、或者你只是想要数组时用它。 */
+    queryRaw(sql: string, params?: unknown[]): Promise<{ columns: string[]; rows: unknown[][] }>;
+    /** 执行一条写入 / DDL。一次调用只能有一条语句。 */
+    exec(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowId: number }>;
+    /**
+     * 一批语句，**全成功或全回滚**。
+     *
+     * **没有 `begin()` / `commit()`。** 跨调用的显式事务是**会泄漏的状态**：
+     * 插件崩溃、被卸载、或者只是忘了提交，那条写事务就一直挂着，而这个连接会被
+     * 下一个打开数据库的实例继续用 —— 于是"我什么都没干，它却说数据库被锁住了"。
+     * 更要命的是插件那一侧拿不到一个"无论发生什么都会执行"的 `finally`。
+     */
+    transaction(
+      statements: Array<{ sql: string; params?: unknown[] }>
+    ): Promise<Array<{ changes: number; lastInsertRowId: number }>>;
   }
 
   // ---- storage ----

@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.pomodoro",
   "displayName": "番茄工作钟",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "专注 / 短休息 / 长休息循环计时，时长、轮次、提示音与自动开始全部可调。结束时通过应用内通知提醒。",
   "author": {
     "name": "环理论",
@@ -25,7 +25,7 @@
     "demo"
   ],
   "engines": {
-    "loopcore": ">=1.0.0"
+    "modulith": ">=1.2.0"
   },
   "main": "index.js",
   "style": "index.css",
@@ -35,7 +35,6 @@
     "notification",
     "filesystem-read"
   ],
-  "sandboxLevel": 2,
   "contributes": {
     "modules": [
       {

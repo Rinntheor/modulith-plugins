@@ -28,7 +28,7 @@ export interface PluginManifest {
   repository?: { type?: string; url?: string };
   categories?: string[];
   keywords?: string[];
-  engines?: { loopcore?: string };
+  engines?: { modulith?: string };
   main?: string;
   style?: string;
   icon?: string;
@@ -111,13 +111,13 @@ export function validatePlugin(dir: string, dirName: string): string[] {
   if (!manifest.author || !manifest.author.name) problems.push('缺少 author.name');
 
   // ---- 兼容性 ----
-  const engines = manifest.engines?.loopcore;
+  const engines = manifest.engines?.modulith;
   if (!engines) {
-    problems.push('缺少 engines.loopcore（兼容的宿主版本范围）');
+    problems.push('缺少 engines.modulith（兼容的宿主版本范围）');
   } else if (!ENGINES_RE.test(engines)) {
-    problems.push(`engines.loopcore 语法非法（不支持复合范围）：${engines}`);
+    problems.push(`engines.modulith 语法非法（不支持复合范围）：${engines}`);
   } else if (!engines.startsWith('>=')) {
-    problems.push(`engines.loopcore 应当只带下界，例如 >=1.0.0（当前 ${engines}）`);
+    problems.push(`engines.modulith 应当只带下界，例如 >=1.2.0（当前 ${engines}）`);
   }
 
   // ---- 入口 ----
