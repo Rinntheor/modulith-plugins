@@ -1,0 +1,48 @@
+{
+  "name": "com.modulith.sample.stand-up",
+  "displayName": "久坐提醒",
+  "version": "1.0.0",
+  "description": "没有界面的插件：它的代码跑在一个独立的 Node 进程里，每 45 分钟提醒你起来动一下，并把累计次数记在插件存储里。演示 contributes.background 这条无界面插件的形态。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/stand-up",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "示例",
+    "效率"
+  ],
+  "keywords": [
+    "sample",
+    "background",
+    "reminder",
+    "headless",
+    "demo"
+  ],
+  "engines": {
+    "modulith": ">=1.6.0"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage",
+    "notification"
+  ],
+  "contributes": {
+    "background": {
+      "entry": "background.js",
+      "onStartup": true,
+      "interval": 2700,
+      "events": []
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

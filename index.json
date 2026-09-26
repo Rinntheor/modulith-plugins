@@ -301,6 +301,49 @@
       ]
     },
     {
+      "id": "com.modulith.sample.stand-up",
+      "displayName": "久坐提醒",
+      "summary": "没有界面的插件：它的代码跑在一个独立的 Node 进程里，每 45 分钟提醒你起来动一下，并把累计次数记在插件存储里。演示 contributes.background 这条无界面插件的形态。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "示例",
+        "效率"
+      ],
+      "keywords": [
+        "sample",
+        "background",
+        "reminder",
+        "headless",
+        "demo"
+      ],
+      "icon": "plugins/stand-up/icon.svg",
+      "source": "plugins/stand-up",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "stand-up-v1.0.0",
+          "engines": {
+            "modulith": ">=1.6.0"
+          },
+          "permissions": [
+            "storage",
+            "notification"
+          ],
+          "background": true,
+          "package": {
+            "path": "dist/com.modulith.sample.stand-up-1.0.0.lcp",
+            "size": 7518,
+            "sha256": "ec336f233869f5dedf21f24a732cfa46a81e75a2aefe2c1234637c6f93e40732"
+          }
+        }
+      ]
+    },
+    {
       "id": "com.rinntheor.modulith.color-lab",
       "displayName": "颜色与对比度",
       "summary": "看清一种颜色的各种写法（含 OKLCH），由它推出一整套色阶，并按 WCAG 标准算出它与背景的对比度是否达标。",
