@@ -322,8 +322,28 @@
       ],
       "icon": "plugins/stand-up/icon.svg",
       "source": "plugins/stand-up",
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
+        {
+          "version": "1.0.1",
+          "tag": "stand-up-v1.0.1",
+          "engines": {
+            "modulith": ">=1.6.0"
+          },
+          "permissions": [
+            "storage",
+            "notification"
+          ],
+          "kinds": [
+            "settings"
+          ],
+          "background": true,
+          "package": {
+            "path": "dist/com.modulith.sample.stand-up-1.0.1.lcp",
+            "size": 8902,
+            "sha256": "df49f557f9178dc52a43d35244fd73f50f3ca7da7288fdf2013519625800479a"
+          }
+        },
         {
           "version": "1.0.0",
           "tag": "stand-up-v1.0.0",
