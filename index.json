@@ -424,8 +424,26 @@
       ],
       "icon": "plugins/encode-lab/icon.svg",
       "source": "plugins/encode-lab",
-      "latest": "1.0.3",
+      "latest": "1.0.4",
       "versions": [
+        {
+          "version": "1.0.4",
+          "tag": "encode-lab-v1.0.4",
+          "engines": {
+            "modulith": ">=1.6.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "package": {
+            "path": "dist/com.rinntheor.modulith.encode-lab-1.0.4.lcp",
+            "size": 22475,
+            "sha256": "15d16a2b78794c501c679c9864cbec0498540556beb7ed239e9893a258400184"
+          }
+        },
         {
           "version": "1.0.3",
           "tag": "encode-lab-v1.0.3",
