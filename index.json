@@ -343,23 +343,6 @@
             "size": 8902,
             "sha256": "df49f557f9178dc52a43d35244fd73f50f3ca7da7288fdf2013519625800479a"
           }
-        },
-        {
-          "version": "1.0.0",
-          "tag": "stand-up-v1.0.0",
-          "engines": {
-            "modulith": ">=1.6.0"
-          },
-          "permissions": [
-            "storage",
-            "notification"
-          ],
-          "background": true,
-          "package": {
-            "path": "dist/com.modulith.sample.stand-up-1.0.0.lcp",
-            "size": 7518,
-            "sha256": "ec336f233869f5dedf21f24a732cfa46a81e75a2aefe2c1234637c6f93e40732"
-          }
         }
       ]
     },
