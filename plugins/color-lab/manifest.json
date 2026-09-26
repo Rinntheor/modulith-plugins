@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.color-lab",
   "displayName": "颜色与对比度",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "看清一种颜色的各种写法（含 OKLCH），由它推出一整套色阶，并按 WCAG 标准算出它与背景的对比度是否达标。",
   "author": {
     "name": "环理论",
@@ -28,8 +28,9 @@
     "对比度"
   ],
   "engines": {
-    "modulith": ">=1.2.0"
+    "modulith": ">=1.6.0"
   },
+  "runtime": "sandboxed",
   "main": "index.js",
   "style": "index.css",
   "icon": "icon.svg",

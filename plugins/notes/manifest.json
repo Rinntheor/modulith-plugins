@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.notes",
   "displayName": "文本速记",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "把想到的事写进上面那个框，点保存就收进下面的列表。可复制、修改、删除，不必先想标题。",
   "author": {
     "name": "环理论",
@@ -24,8 +24,9 @@
     "demo"
   ],
   "engines": {
-    "modulith": ">=1.2.0"
+    "modulith": ">=1.6.0"
   },
+  "runtime": "sandboxed",
   "main": "index.js",
   "style": "index.css",
   "icon": "icon.svg",
