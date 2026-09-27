@@ -1,0 +1,71 @@
+{
+  "name": "com.modulith.sample.stand-up",
+  "displayName": "久坐提醒",
+  "version": "1.0.1",
+  "description": "没有界面的插件：它的代码跑在一个独立的 Node 进程里，每 45 分钟提醒你起来动一下，并把累计次数记在插件存储里。演示 contributes.background 这条无界面插件的形态。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/stand-up",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "示例",
+    "效率"
+  ],
+  "keywords": [
+    "sample",
+    "background",
+    "reminder",
+    "headless",
+    "demo"
+  ],
+  "engines": {
+    "modulith": ">=1.6.0"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage",
+    "notification"
+  ],
+  "contributes": {
+    "settings": [
+      {
+        "id": "intervalMinutes",
+        "label": "提醒间隔",
+        "description": "坐多久提醒一次。宿主每 10 分钟唤醒一次后台进程，因此实际间隔是这里选的值的向上取整到下一个 10 分钟。",
+        "type": "select",
+        "default": "45",
+        "options": [
+          { "value": "15", "label": "15 分钟" },
+          { "value": "30", "label": "30 分钟" },
+          { "value": "45", "label": "45 分钟" },
+          { "value": "60", "label": "1 小时" },
+          { "value": "90", "label": "1.5 小时" }
+        ]
+      },
+      {
+        "id": "includeCount",
+        "label": "提醒里带上累计次数",
+        "description": "关掉之后提醒只说「该起来动一下了」，不报「这是第几次」.",
+        "type": "boolean",
+        "default": true
+      }
+    ],
+    "background": {
+      "entry": "background.js",
+      "onStartup": true,
+      "interval": 600,
+      "events": []
+    }
+  },
+  "activationEvents": [
+    "onStartup"
+  ]
+}

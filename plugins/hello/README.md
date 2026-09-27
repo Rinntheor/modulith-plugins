@@ -16,36 +16,54 @@
 
 | 约定 | 位置 |
 | --- | --- |
-| 清单字段与 `engines` 写法（只写下界） | `manifest.json` |
-| 自执行 IIFE 与 `createContext()` | `index.js` 开头 |
-| 使用宿主提供的 React | `var React = Modulith.React` |
-| 持久化 | `ctx.storage.get` / `ctx.storage.set` |
-| 日志 | `ctx.logger` |
-| 注册模块（必须同步调用） | `Modulith.registerModule` |
+| 清单字段、`engines` 写法（只写下界）与 `runtime` | `manifest.json` |
+| 自执行 IIFE 与 `window.Modulith` 的取用 | `index.js` 开头 |
+| 沙箱插件跑在自己的 webview 里 | `manifest.json` 的 `"runtime": "sandboxed"` |
+| 持久化 | `Modulith.storage.get` / `Modulith.storage.set` |
+| 日志 | `Modulith.log` |
+| 权限探测 | `Modulith.has('storage')` |
 | 独立样式表与深色模式 | `index.css`，类名带 `hello__` 前缀 |
 | SVG 图标 | `icon.svg` |
+
+## 它跑在沙箱里 —— 这改变了三件事
+
+这个插件的清单写着 `"runtime": "sandboxed"`，因此它的代码跑在**自己的 webview** 里，
+而不是宿主那个页面里。
+
+| | 结果 |
+| --- | --- |
+| 没有 React，也没有宿主 CSS | 它是独立文档，宿主的 `--accent-*` 变量与 `.dark` 类都到不了这里。界面自己写，颜色自己带 |
+| 不能调宿主命令 | 它的 webview 不匹配任何 capability，`invoke(...)` 一律被拒 |
+| 不能直接联网 | 文档的 CSP 里 `connect-src` 只留了插件自己的来源 |
+
+这不是缺陷。它意味着插件可以**自带框架、自带样式，与宿主的版本解耦** ——
+代价是与宿主的视觉不再自动一致。
+
+要做什么只能通过 `window.Modulith`，那个对象由**宿主**提供（`/<插件 id>/bridge.js`），
+插件改不了它。它的全部方法都是异步的：那些是对宿主的 RPC，不是本地调用。
 
 ## 四处值得注意的写法
 
 ### 首帧不显示 0
 
-次数是从存储里异步读出来的。`useState(null)` 让首帧显示「正在读取…」，而不是先画一个 0
-再跳成真实值 —— 后者会在每次打开时闪一下错误数字。
+次数是从存储里异步读出来的。首帧显示「正在读取…」而不是先画一个 0 再跳成真实值 ——
+后者会在每次打开时闪一下错误数字。
 
 ### 读写都带错误处理
 
-`ctx.storage` 返回 Promise，写盘可能失败（磁盘满、权限问题）。少了 `.catch` 会得到一个
-静默失败的按钮：看起来点了没反应，而没有任何提示。
+`Modulith.storage` 返回 Promise，写盘可能失败（磁盘满、超配额）。少了 `.catch` 会得到一个
+静默失败的按钮：看起来点了没反应，而没有任何提示。宿主给的失败消息里带着
+「哪一档、上限多少、已用多少、本次多少」四个数字，**原样交给日志**，不要自己改写它。
 
 ### 落盘失败不回滚界面
 
 `bump()` 先更新界面再写存储，失败时只记一条日志。理由是用户点了一个按钮，按钮就该有反应；
 把界面回滚成原值会让人以为点击没生效，反而更困惑。
 
-### 注册模块必须同步
+### 桥接层缺失时说一句人话
 
-`registerModule()` 放在 IIFE 顶层，不能包在 Promise 或 `setTimeout` 里。宿主在一次加载
-结束后**立即**检查注册结果，晚一步就会被判定为「没有注册任何模块」，插件被标记为异常。
+`if (!M)` 那一支不是多余的：宿主合成的入口文档一旦出问题，缺了它插件会抛
+`Cannot read properties of undefined`，看起来像插件自己的 bug。
 
 ## 用到的权限
 

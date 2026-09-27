@@ -89,7 +89,7 @@ interface IndexPackage {
 interface IndexVersion {
   version: string;
   tag: string;
-  engines: { loopcore: string };
+  engines: { modulith: string };
   permissions: string[];
   /**
    * 这个版本贡献了哪些种类。
@@ -103,6 +103,35 @@ interface IndexVersion {
   kinds?: string[];
   /** 声明了 `onStartup`：应用可用之后它就会开始工作 */
   background?: boolean;
+  /**
+   * 这个版本跑在哪里：`"sandboxed"` 或 `"in-process"`。
+   *
+   * **由清单派生，不是作者填写** —— 与 `kinds` / `permissions` 同一个位置、
+   * 同一个理由。
+   *
+   * ============================================================
+   * 为什么这一项比 `kinds` 重要得多
+   * ============================================================
+   *
+   * `kinds` 只决定"它会不会占用户侧边栏一行"，而这一项决定**宿主放不放行安装**：
+   * 未隔离插件与宿主跑在同一个 JS 上下文里，它申请的权限只是声明、不是约束，
+   * 因此 v1.6.0 起宿主默认只允许安装已隔离的插件。
+   *
+   * 基于这一点，写作方式与 `kinds` 有一处**刻意的不同**：
+   *
+   *   * `kinds` 在空数组时**不写**（"没有这个字段"与"声明了但一个都不生效"
+   *     是两件事，前者该被如实表达）；
+   *   * `runtime` **每个版本都写**，包含缺省的那一档 `"in-process"`。
+   *
+   * 因为缺省值就落在这个字段本身上：清单里不写 `runtime` 就是 `in-process`。
+   * 而索引里"没有这个字段"会被宿主解读为**不知道**（索引比清单旧），
+   * 于是宿主要多走一道"打开包、读清单"的核实。把每一档都写明，
+   * 那条核实路径就不会在正常情况下被走到。
+   *
+   * 宿主侧的三档处理与"不知道"为什么放行，见应用仓库
+   * `src/services/pluginMarket.ts` 的 `installGate`。
+   */
+  runtime: 'sandboxed' | 'in-process';
   package: IndexPackage;
 }
 
@@ -299,10 +328,14 @@ function packOne(dirName: string): FreshPlugin {
     version: {
       version: manifest.version,
       tag: `${dirName}-v${manifest.version}`,
-      engines: { loopcore: manifest.engines?.loopcore ?? '*' },
+      engines: { modulith: manifest.engines?.modulith ?? '*' },
       permissions: [...(manifest.permissions ?? [])],
       ...(kinds.length > 0 ? { kinds } : {}),
       ...(background ? { background: true } : {}),
+      // 运行位置。**每一档都写**，包括缺省的 `in-process` —— 理由见索引结构里
+      // `runtime` 上那段说明：宿主把"没有这个字段"读成"不知道"，而"不知道"
+      // 会让它多走一道打开包读清单的核实。正常情况下不该走到那里。
+      runtime: manifest.runtime === 'sandboxed' ? 'sandboxed' : 'in-process',
       package: {
         path: `dist/${manifest.name}-${manifest.version}.lcp`,
         size: buffer.length,
