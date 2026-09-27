@@ -36,6 +36,20 @@ export interface PluginManifest {
   permissions?: string[];
   sandboxLevel?: number;
   /**
+   * 代码跑在哪里：`"sandboxed"`（自己的来源，拿不到宿主能力）或
+   * `"in-process"`（与宿主同一个 JS 上下文）。**缺省是 `in-process`。**
+   *
+   * 本仓库只做形状校验（两个字面量之一）。它会被**派生进索引**
+   * （`build.ts` 的 `version.runtime`），因为宿主需要用它在**安装之前**告诉
+   * 用户"这个插件有没有隔离" —— 而 v1.6.0 起宿主默认不放行未隔离的插件。
+   *
+   * 未知取值**不折算成缺省**：与应用侧同一条理由 —— 一个写了 `sandboxed`
+   * 却被当成 `in-process` 装的插件，是一次声明了隔离而实际没有的降级。
+   * 那种情况下应用会直接拒绝安装，而错误信息只说"清单非法"。因此这里把它拦在
+   * **打包之前**，并说清是哪一份清单、哪一项。
+   */
+  runtime?: string;
+  /**
    * 贡献点与激活事件。
    *
    * 本仓库对它们**只做形状检查**（是不是数组），成员资格由宿主决定 —— 与权限名单
@@ -140,6 +154,20 @@ export function validatePlugin(dir: string, dirName: string): string[] {
   // 而未以 .svg 结尾的值会被宿主当作图标名处理，因此不额外校验。
   if (!manifest.icon && !manifest.iconSvg) {
     problems.push('缺少 icon 或 iconSvg');
+  }
+
+  // ---- 运行位置 ----
+  //
+  // 已知的两个取值之外一律拒绝，而且**不折算成缺省**。理由见 `runtime` 字段上的
+  // 说明：应用侧遇到未知值会让整份清单不合法（枚举反序列化失败），于是作者拿到的
+  // 是一句"清单非法"，而他并不知道是哪一个字段。在这里拦下的成本是零。
+  if (manifest.runtime !== undefined) {
+    if (manifest.runtime !== 'sandboxed' && manifest.runtime !== 'in-process') {
+      problems.push(
+        `runtime 只能是 "sandboxed" 或 "in-process"（当前 ${JSON.stringify(manifest.runtime)}）；` +
+          `不写等于 "in-process"`
+      );
+    }
   }
 
   // ---- 权限 ----
