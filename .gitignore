@@ -23,3 +23,7 @@ node_modules/
 
 # 压缩过程中的临时文件
 *.zip.tmp
+
+# 发布脚本的兜底临时落点 —— 只在系统临时目录不可写时才会出现。
+# 见 scripts/release.ts 里 SCRATCH 的说明。
+.release-scratch/

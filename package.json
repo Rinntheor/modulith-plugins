@@ -10,6 +10,11 @@
     "build": "node scripts/build.ts",
     "dev": "node scripts/watch.ts",
     "check": "node scripts/build.ts --check",
+    "release": "node scripts/release.ts",
+    "release:check": "node scripts/release.ts --check",
+    "release:tags": "node scripts/release.ts --tags-only",
+    "release:push": "node scripts/release.ts --push",
+    "release:verify": "node scripts/release.ts --verify",
     "typecheck": "tsc --noEmit",
     "check:scripts": "tsc --noEmit -p scripts/tsconfig.json",
     "typecheck:all": "npm run typecheck && npm run check:scripts"
