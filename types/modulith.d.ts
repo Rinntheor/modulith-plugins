@@ -278,133 +278,28 @@ declare global {
     /** 收尾登记。功能型插件的必备项 */
     readonly disposables: PluginDisposables;
     /**
-     * 访问**用户在原生对话框里当场选中**的文件与目录。
+     * ⚠️ **沙箱独有的成员不在这份声明里**，`files` 就是其中一个。
      *
-     * 需要 `filesystem-read`（读）与/或 `filesystem-scoped`（可写目录）。
+     * 这份文件映射的是**宿主 `HOST_CAPABILITIES.context` 那一份契约**，也就是
+     * in-process 的 `ctx`。而 `theme` / `shortcuts` / `commands` / `ui` / `files`
+     * 这些只有沙箱侧才有（它们的载体是令牌或宿主推送），把它们写进这里会让这份
+     * 镜像与真实契约**不一致** —— 应用仓库的 `check:contributions.ts` 会逐字比对
+     * 两者，因此那样写会当场让宿主那边的门禁变红（试过）。
      *
-     * ============================================================
-     * 为什么它是可选的，以及为什么路径不由插件给出
-     * ============================================================
+     * 需要给沙箱独有成员补类型的插件，应当在**自己的源码里**做全局声明合并：
      *
-     * 1. **它只有沙箱侧有。** 授权的载体是一条带令牌的 URL，而令牌只发给沙箱界面；
-     *    in-process 插件跑在宿主文档里、没有令牌。所以类型上带 `?`，而不是声明成
-     *    必有 —— 一个 `ctx.files!` 会在 in-process 下变成运行期 TypeError。
-     * 2. **没有 `open(path)` 这种接口，也不会有。** 插件能提供的只有对话框标题与
-     *    扩展名过滤器；文件与目录一律由用户在原生对话框里选定。拿到的是不透明的
-     *    `grant` 句柄，**绝对路径不会交给插件**。
-     * 3. **授权是会话级的**：绑在 `(插件, 界面)` 上，界面一关 / 插件一停用 / 应用
-     *    一退出就失效。因此**不要把它存进 `ctx.storage`** —— 下次打开界面时那个 id
-     *    已经作废，而每一次调用都会拿到 403。要知道"这次选过哪些"，用 `grants()`。
+     * ```ts
+     * // src/<你的插件>/host-extras.d.ts
+     * declare global {
+     *   interface ModulithContext {
+     *     readonly files?: PluginFiles;
+     *   }
+     * }
+     * ```
      *
-     * 宿主有没有这个成员也可以直接用 `Modulith.capabilities.context` 探测。
+     * 这样"哪一份契约里有它"这件事就写在需要它的那个插件里，而不是被混进共享镜像。
+     * 本插件就是这么做的，见 `src/art-trace/host-files.d.ts`。
      */
-    readonly files?: PluginFiles;
-  }
-
-  // ---- files ----
-
-  /**
-   * 一次授权的描述。
-   *
-   * `grant` 是唯一可用的句柄；`label` 只用于显示，**不参与任何路径解析**。
-   */
-  interface PluginFileGrant {
-    grant: string;
-    kind: 'file' | 'directory';
-    /** 给人看的文件名或目录名 */
-    label: string;
-    readable: boolean;
-    writable: boolean;
-    /** 文件授权是文件大小；目录授权恒为 0 */
-    bytes: number;
-  }
-
-  /** 授权目录里的一个条目，与 `PluginDataEntry` 同形 */
-  interface PluginFileEntry {
-    name: string;
-    isDir: boolean;
-    size: number;
-    modified: number;
-  }
-
-  /**
-   * 用户授权的文件访问（`ctx.files`）。**沙箱独有。**
-   *
-   * 分工上与 `ctx.dataDir` 是"谁的目录"这一个问题：那个是插件自己的私有目录，
-   * 这个是用户当场选定的目录。因此这里的总量**没有**迁就插件私有目录那套配额 ——
-   * 目标目录是用户自己选的，插件决定的只是它里面的相对路径。
-   */
-  interface PluginFiles {
-    /** 清单里声明了 `filesystem-read` */
-    isAvailable(): boolean;
-    /** 清单里声明了 `filesystem-scoped`（能不能拿到**可写**的目录授权） */
-    canWrite(): boolean;
-
-    /**
-     * 弹原生多选框让用户挑文件。取消时返回**空数组**（不是 `null`）。
-     *
-     * `extensions` 只影响对话框里的过滤器 —— 用户仍然可以切到「所有文件」，
-     * 因此**不要把它当成校验**。
-     */
-    pick(options?: {
-      extensions?: string[];
-      filterName?: string;
-    }): Promise<PluginFileGrant[]>;
-
-    /**
-     * 弹原生目录框。用户取消时返回 `null`。
-     *
-     * `writable` 为真时**需要 `filesystem-scoped`**；只读目录授权只要
-     * `filesystem-read`。
-     */
-    pickDirectory(options?: {
-      writable?: boolean;
-      title?: string;
-    }): Promise<PluginFileGrant | null>;
-
-    /** 这块界面当前持有的全部授权。**这是唯一真源**，不要自己记账 */
-    grants(): Promise<PluginFileGrant[]>;
-
-    /** 主动放开一条授权 */
-    release(grant: string): Promise<boolean>;
-
-    /** 列一个**目录授权**里的条目 */
-    list(grant: string, rel?: string): Promise<PluginFileEntry[]>;
-
-    /** 取元信息；不存在时返回 `null`（不是错误） */
-    stat(grant: string, rel?: string): Promise<PluginFileEntry | null>;
-
-    /** 建目录（含中间层）。需要可写 */
-    mkdir(grant: string, rel: string): Promise<void>;
-
-    /**
-     * 删掉授权目录里的一个文件或一棵树。需要可写。
-     *
-     * **删不掉授权根** —— 空路径被显式拒绝。最坏情况只能是删掉插件自己写进去的东西。
-     */
-    remove(grant: string, rel: string): Promise<void>;
-
-    /** 读成字节。**大文件用这个** */
-    read(grant: string, rel?: string): Promise<ArrayBuffer>;
-    /** 读成文本（UTF-8） */
-    readText(grant: string, rel?: string): Promise<string>;
-
-    /** 写一个文件（覆盖）。落盘是"全有或全无" */
-    write(
-      grant: string,
-      rel: string,
-      data: ArrayBuffer | ArrayBufferView | Blob | string
-    ): Promise<void>;
-    /** 写一段文本（UTF-8） */
-    writeText(grant: string, rel: string, text: string): Promise<void>;
-
-    /**
-     * 一条授权之内的地址，**可以直接放进 `<img src>`**。
-     *
-     * 用它做预览，不要 `read()` 之后再造 `blob:` —— 后者要求整份字节先经过 JS 堆，
-     * 缩略图列表里几十张就是几百 MB。
-     */
-    url(grant: string, rel?: string): string;
   }
 
   // ---- dataDir ----
