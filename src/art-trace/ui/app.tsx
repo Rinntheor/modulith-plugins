@@ -27,7 +27,6 @@ import {
   IconInspect,
   IconLedger,
   IconSettings,
-  IconShield,
   IconWatermark,
   IconX,
 } from './icons';
@@ -81,10 +80,11 @@ export function App() {
     <div className="arttrace">
       <div className="arttrace__shell">
         <nav className="arttrace__rail" aria-label="功能">
+          {/* 品牌区只有名字与版本，**没有图标**。
+              这里原来放了一个盾牌图标当作 logo，被去掉了：左侧导航已经是固定宽度的
+              窄栏，图标占掉的是"更长的功能名"与"更少的误点"之间的那点余量，
+              而它在信息上什么都没多给 —— 用户看到「影像元数据工坊」就够了。 */}
           <div className="arttrace__brand">
-            <span className="arttrace__brand-mark">
-              <IconShield size={15} />
-            </span>
             <span className="arttrace__brand-text">
               <span className="arttrace__brand-name">影像元数据工坊</span>
               <span className="arttrace__brand-version">art-trace 1.0.0</span>

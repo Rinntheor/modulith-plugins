@@ -237,6 +237,31 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ============================================================
+ * 列的溢出必须有去处（这一条修的是一个真实缺陷）
+ * ============================================================
+ *
+ * 症状：设置页六张卡片、批量页五张卡片，每一张都只露出上面一小截，
+ * 里面一半的开关、输入框和按钮既看不见也点不到；台账页最下面的「危险区」
+ * 整个掉到窗口外面。
+ *
+ * 机制：`overflow` 不是 `visible` 的元素，其 flex **自动最小尺寸按规范解析为 0**
+ * —— 换句话说 `min-height: auto` 根本保护不了它。面板为了圆角必须 `overflow: hidden`。
+ * 于是当一列的天然高度超过可用高度时，flex 把所有可收缩的子项按比例压扁，
+ * 每个面板又是 `overflow: hidden`，被压掉的部分就永远拿不回来。
+ * 实测：`.arttrace__panel` 的 `scrollHeight 369 / clientHeight 73`，296px 内容
+ * （含 8 个可操作元素）永久不可达。
+ *
+ * 所以规矩是：**列里的东西要么完整显示，要么让列去滚**，不允许"压扁"。
+ * 配合下面 `.arttrace__panel` 的 `flex: 0 0 auto`，被压扁这条路径就被封死了。
+ */
+.arttrace__main > .arttrace__col,
+.arttrace__main > .arttrace__stack,
+.arttrace__split > .arttrace__col,
+.arttrace__split > .arttrace__stack {
+  overflow: auto;
+}
 .arttrace__scroll::-webkit-scrollbar,
 .arttrace__code-body::-webkit-scrollbar {
   width: 9px;
@@ -276,22 +301,12 @@
   border-right: 1px solid var(--arttrace-border);
 }
 
+/* 品牌区：只有名字与版本。原来这里有一个 26×26 的图标块当 logo，已经去掉
+   —— 理由写在 `ui/app.tsx` 那一段注释里。 */
 .arttrace__brand {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 6px 8px 12px;
-}
-.arttrace__brand-mark {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--arttrace-accent-soft);
-  color: var(--arttrace-accent);
-  border: 1px solid var(--arttrace-accent-line);
 }
 .arttrace__brand-text {
   display: flex;
@@ -442,6 +457,13 @@
   flex-direction: column;
   gap: 10px;
 }
+/* 列与栈里的东西一律**不被压缩**（理由见「列的溢出必须有去处」那一段）。
+   写在这里是为了收住"忘了给某个子项加 flex-shrink: 0"这一类遗漏 ——
+   面板、代码块、提示词框、表格容器都吃过这个亏。 */
+.arttrace__col > *,
+.arttrace__stack > * {
+  flex-shrink: 0;
+}
 .arttrace__stack--tight {
   gap: 6px;
 }
@@ -481,7 +503,12 @@
 .arttrace__panel {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  /* **面板永不收缩。** `flex: 0 0 auto` 而不是默认的 `0 1 auto`：
+     面板必须 `overflow: hidden`（圆角要裁掉标题栏的直角），而 `overflow` 不是
+     `visible` 时 `min-height: auto` 会解析成 0，于是默认的 `flex-shrink: 1`
+     能把面板压到只剩几十像素高，内容被自己的 `overflow: hidden` 吞掉。
+     实测过 `clientHeight: 0` 与 `clientHeight: 73` 两种压扁。详见「列的溢出必须有去处」。 */
+  flex: 0 0 auto;
   background: var(--arttrace-panel);
   border: 1px solid var(--arttrace-border);
   border-radius: var(--arttrace-radius-lg);
@@ -527,14 +554,25 @@
   gap: 0;
 }
 
-/* 让面板内部可滚动的那一块自己撑开，而不是把面板顶大。 */
-.arttrace__panel--fill {
-  flex: 1;
-  min-height: 0;
+/* 让面板内部可滚动的那一块自己撑开，而不是把面板顶大。
+ *
+ * 选择器写成两个类（`.arttrace__panel.arttrace__panel--fill`）而不是一个：
+ * 上面那条 `.arttrace__col > *` / `.arttrace__stack > *` 的 `flex-shrink: 0`
+ * 与 `.arttrace__panel--fill` 是同特异度的，靠书写顺序决定胜负太脆 ——
+ * 而"能不能长"这件事必须由这里说了算。 */
+.arttrace__panel.arttrace__panel--fill {
+  flex: 1 1 auto;
+  /* 被挤到极限时留一条底线：低于这个高度就说明这一列装不下了，
+     此时由列的滚动去接管，而不是把面板压成一条线。 */
+  min-height: 120px;
 }
 .arttrace__panel--fill .arttrace__panel-body {
   flex: 1;
   min-height: 0;
+  /* 兜底：填充面板里放的如果不是一个 Scroll（例如「原始」页直接放代码块），
+     内容照样得能滚出来。子元素已经是 Scroll 时它自己会收缩到刚合适，
+     因此这层 `auto` 不会多出一条滚动条。 */
+  overflow: auto;
 }
 
 /* ============================================================
@@ -1183,6 +1221,9 @@
   border-radius: var(--arttrace-radius);
   background: var(--arttrace-inset);
   overflow: hidden;
+  /* 同上面板那一条：`overflow: hidden` 让自动最小尺寸失效，必须显式拒绝压缩。
+     不写时一个两万字符的 JSON 块会被压成 0 高（实测 clientHeight: 0）。 */
+  flex: 0 0 auto;
 }
 .arttrace__code-head {
   display: flex;
@@ -1202,6 +1243,12 @@
 .arttrace__code-body {
   margin: 0;
   padding: 9px 11px;
+  /* **这一条曾经漏了。** `max-height` 由 JSX 传进来（220 / 420），而它同时是
+     `overflow` 的锚点：只写 `max-height` 而不写 `overflow`，超出部分会被外面
+     `.arttrace__code` 的 `overflow: hidden` 裁掉 —— 表现是"这份 JSON 只显示
+     前二十来行，剩下的既看不到也拉不出来"。上面那几条 `::-webkit-scrollbar`
+     规则本来就假定它会滚，只是没人给它 `overflow`。 */
+  overflow: auto;
   font-family: var(
     --font-mono,
     ui-monospace,
@@ -1417,7 +1464,10 @@
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
+  /* `overflow: auto` 同样让自动最小尺寸失效，因此这里也要显式拒绝压缩 ——
+     提示词框是**故意**限高的（200px），被再压一次就只剩标题了。 */
   overflow: auto;
+  flex: 0 0 auto;
 }
 
 /* 参数高亮卡 */
