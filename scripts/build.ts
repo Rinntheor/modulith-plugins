@@ -76,6 +76,106 @@ function signatureProblem(): string | null {
   return null;
 }
 
+/**
+ * 检查签名文件的**字节形状**。
+ *
+ * ============================================================
+ * 为什么需要它（2026-10-07 的市场事故）
+ * ============================================================
+ *
+ * `index.json.sig` 的内容是**正确且新鲜**的签名，但文件后面被多写了 30 个字节：
+ *
+ *     node scripts/build.ts --check\n
+ *
+ * 也就是说，紧接着要跑的那条命令被写进了签名文件里。后果不是"新插件看不到"，
+ * 而是**所有人的市场都打不开**：
+ *
+ * 客户端对签名的解码是严格的 —— 整个文件必须是合法 base64。多出来的字节让 `=`
+ * 不再位于末尾，解码在 offset 394 失败，客户端拒绝使用**整份索引**。
+ * 两条候选来源（jsDelivr 与 GitHub 直连）拿到的是同一份坏文件，因此两条一起失败。
+ *
+ * ============================================================
+ * 为什么此前没有任何东西拦得住
+ * ============================================================
+ *
+ * - `signatureProblem()` 只比较索引与签名的**修改时间** —— 签名确实被改过，
+ *   而且比索引新，因此这一项是"通过"的；
+ * - `release.ts --check` 只查 tag；
+ * - 两者都不看签名的字节。
+ *
+ * 更隐蔽的一点：**`Buffer.from(str, 'base64')` 会静默跳过非法字符**，
+ * 于是"解一下再验签"也会得出「签名有效」这个错误结论 —— 我第一版线上验证脚本
+ * 就是这么被骗过去的。只有显式的字符表与补位检查能发现它。
+ *
+ * 这一步不需要私钥（它只看形状），因此可以放进 CI。
+ */
+function signatureShapeProblem(): string | null {
+  if (!existsSync(INDEX_SIGNATURE_FILE)) return null; // 缺文件由上面那道负责
+
+  const text = readFileSync(INDEX_SIGNATURE_FILE, 'utf8');
+  // 与客户端一致：先 trim。tauri 写出的文件没有尾随换行，但尾随空白本身
+  // 不影响解码，把它当成错误会造成假失败。
+  const trimmed = text.trim();
+
+  const broken = (detail: string): string =>
+    `index.json.sig 的字节形状非法：${detail}\n` +
+    '  客户端会拒绝使用**整份索引** —— 市场对所有人打不开。\n' +
+    '  常见成因：签名文件被追加了别的内容（例如把下一条命令写进了文件），' +
+    '或用重定向/编辑器保存时改了编码。\n' +
+    '  ' +
+    SIGN_COMMAND;
+
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(trimmed)) {
+    const bad = trimmed.search(/[^A-Za-z0-9+/=]/);
+    return broken(
+      `含 base64 字符表之外的字符（第一个在第 ${bad} 个字符处：` +
+        `${JSON.stringify(trimmed.slice(bad, bad + 40))}）`
+    );
+  }
+
+  if (trimmed.length % 4 !== 0) {
+    return broken(`长度不是 4 的倍数（${trimmed.length} 个字符）`);
+  }
+
+  // `=` 只能出现在最后两个位置。字符表正则已经限定了"最多两个且在末尾"，
+  // 这里再查一次位置，是为了在**中间**出现 `=`（本次事故的形态）时能指到具体位置。
+  const firstEq = trimmed.indexOf('=');
+  if (firstEq !== -1 && firstEq < trimmed.length - 2) {
+    return broken(
+      `\`=\` 出现在第 ${firstEq} 个字符处，但它只能出现在最后两位 —— ` +
+        '文件多半被追加了内容'
+    );
+  }
+
+  const lines = Buffer.from(trimmed, 'base64')
+    .toString('utf8')
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''))
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length < 4) {
+    return broken(`解出的 minisign 内容只有 ${lines.length} 行，应当有 4 行`);
+  }
+  if (!lines[0].startsWith('untrusted comment:')) {
+    return broken('第 1 行不是 `untrusted comment:`');
+  }
+  if (!lines[2].startsWith('trusted comment:')) {
+    return broken('第 3 行不是 `trusted comment:`');
+  }
+
+  // 10 字节头（算法 2 + key id 8）+ 64 字节签名
+  const blob = Buffer.from(lines[1], 'base64');
+  if (blob.length !== 74) {
+    return broken(`签名数据段是 ${blob.length} 字节，应当是 74 字节（10 字节头 + 64 字节签名）`);
+  }
+
+  if (text.includes('\r')) {
+    return broken('文件含 CR（CRLF 换行）—— 签名文件应当是 LF 换行');
+  }
+
+  return null;
+}
+
 // ============================================================
 // 索引的数据结构
 // ============================================================
@@ -648,6 +748,12 @@ async function main(): Promise<number> {
     );
   }
 
+  // 形状问题是**已经存在**的坏文件，与"还没签"不同：它必须说出来。
+  const shapeIssue = signatureShapeProblem();
+  if (shapeIssue !== null) {
+    console.log('\n⚠ ' + shapeIssue);
+  }
+
   return 0;
 }
 
@@ -685,8 +791,17 @@ function runCheck(fresh: readonly FreshPlugin[]): number {
     problems.push('index.json 与仓库内容不一致，需要重新生成');
   }
 
-  const signatureIssue = signatureProblem();
-  if (signatureIssue) problems.push(signatureIssue);
+  // 两道与签名有关的检查，都不需要私钥：
+  //   1. `signatureProblem`      —— 索引比签名新（「可能忘了签」）
+  //   2. `signatureShapeProblem` —— 签名文件的字节形状非法（「签名文件坏了」）
+  // 第 2 道是 2026-10-07 市场事故之后补的：当时第 1 道是**通过**的，
+  // 因为签名确实被改过、而且比索引新。
+  const signatureIssues: string[] = [];
+  const freshnessIssue = signatureProblem();
+  if (freshnessIssue) signatureIssues.push(freshnessIssue);
+  const shapeIssue = signatureShapeProblem();
+  if (shapeIssue) signatureIssues.push(shapeIssue);
+  problems.push(...signatureIssues);
 
   if (problems.length > 0) {
     console.error('校验未通过：\n');
@@ -694,7 +809,8 @@ function runCheck(fresh: readonly FreshPlugin[]): number {
 
     // 结尾的指引必须与问题匹配。签名缺失**不是**重新生成索引能解决的，
     // 一律提示 build 会让人照着做一遍然后发现毫无变化。
-    const onlySignatureIssue = problems.length === 1 && signatureIssue !== null;
+    const onlySignatureIssue =
+      signatureIssues.length > 0 && problems.length === signatureIssues.length;
     console.error(
       onlySignatureIssue
         ? '\n签名需要私钥，本脚本刻意不接触它，因此不会代签。'
