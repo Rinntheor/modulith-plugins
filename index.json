@@ -293,6 +293,59 @@
       ]
     },
     {
+      "id": "com.rinntheor.modulith.art-trace",
+      "displayName": "影像元数据工坊",
+      "summary": "查清一张图里到底有什么：解析 ComfyUI / Stable Diffusion / NovelAI 的生成参数、EXIF、XMP 与容器里的每一个块；按需无损抹除痕迹并追加作者信息；打上可见水印与可追踪的隐形水印；每一份成品都留下台账，事后能查出当初发给了谁。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "图像",
+        "隐私",
+        "创作"
+      ],
+      "keywords": [
+        "metadata",
+        "exif",
+        "xmp",
+        "comfyui",
+        "stable-diffusion",
+        "watermark",
+        "privacy",
+        "provenance"
+      ],
+      "icon": "plugins/art-trace/icon.svg",
+      "source": "plugins/art-trace",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "art-trace-v1.0.0",
+          "engines": {
+            "modulith": ">=1.6.3"
+          },
+          "permissions": [
+            "storage",
+            "plugin-data",
+            "filesystem-read",
+            "filesystem-scoped",
+            "notification"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "runtime": "sandboxed",
+          "package": {
+            "path": "dist/com.rinntheor.modulith.art-trace-1.0.0.lcp",
+            "size": 461502,
+            "sha256": "19b2094bb3c18c596b789ddbb3c9f1dc0d021bba5199a43d2bc8021667ab2ea1"
+          }
+        }
+      ]
+    },
+    {
       "id": "com.rinntheor.modulith.color-lab",
       "displayName": "颜色与对比度",
       "summary": "看清一种颜色的各种写法（含 OKLCH），由它推出一整套色阶，并按 WCAG 标准算出它与背景的对比度是否达标。",

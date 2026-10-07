@@ -277,6 +277,29 @@ declare global {
     readonly settings: PluginSettingsAPI;
     /** 收尾登记。功能型插件的必备项 */
     readonly disposables: PluginDisposables;
+    /**
+     * ⚠️ **沙箱独有的成员不在这份声明里**，`files` 就是其中一个。
+     *
+     * 这份文件映射的是**宿主 `HOST_CAPABILITIES.context` 那一份契约**，也就是
+     * in-process 的 `ctx`。而 `theme` / `shortcuts` / `commands` / `ui` / `files`
+     * 这些只有沙箱侧才有（它们的载体是令牌或宿主推送），把它们写进这里会让这份
+     * 镜像与真实契约**不一致** —— 应用仓库的 `check:contributions.ts` 会逐字比对
+     * 两者，因此那样写会当场让宿主那边的门禁变红（试过）。
+     *
+     * 需要给沙箱独有成员补类型的插件，应当在**自己的源码里**做全局声明合并：
+     *
+     * ```ts
+     * // src/<你的插件>/host-extras.d.ts
+     * declare global {
+     *   interface ModulithContext {
+     *     readonly files?: PluginFiles;
+     *   }
+     * }
+     * ```
+     *
+     * 这样"哪一份契约里有它"这件事就写在需要它的那个插件里，而不是被混进共享镜像。
+     * 本插件就是这么做的，见 `src/art-trace/host-files.d.ts`。
+     */
   }
 
   // ---- dataDir ----
@@ -639,6 +662,7 @@ declare global {
    */
   type PluginPermission =
     | 'storage'
+    | 'plugin-data'
     | 'network'
     | 'network-external'
     | 'notification'
@@ -647,6 +671,8 @@ declare global {
     | 'filesystem-write'
     | 'filesystem-scoped'
     | 'plugin-communicate'
+    | 'native-module'
+    | 'dev-tools'
     | 'process-spawn';
 }
 
