@@ -1,0 +1,1468 @@
+/* plugins/art-trace/index.css
+ *
+ * 影像元数据工坊的样式。
+ *
+ * ============================================================
+ * 六条与宿主适配有关的硬约束（这些不是风格选择，是环境事实）
+ * ============================================================
+ *
+ * 1. **不能用 Tailwind 工具类。** 宿主只外链这一个文件；Tailwind 的产物是构建宿主
+ *    时扫描**宿主源码**生成的，插件里写的 `bg-white` 不在那次扫描范围内 ——
+ *    类名存在，规则不存在，没有任何样式生效。
+ *
+ * 2. **没有 preflight。** 插件文档只有 `html,body{margin:0;padding:0;height:100%}`
+ *    与 `#modulith-root{min-height:100%}`。因此 `box-sizing`、`h1` 的字号、
+ *    `button` 的 UA 边框、`p` 的外边距全部要自己重置 —— 见下面第一段。
+ *
+ * 3. **可以用宿主的主题令牌。** 宿主把 `getComputedStyle(documentElement)` 里的
+ *    自定义属性全量注入插件文档（`<style id="modulith-theme">`），并把 `.dark` /
+ *    `.lc-reduce-motion` / `.lc-no-glass` 挂在插件的 `<html>` 上。因此
+ *    `var(--accent-*)` 与 `:root.dark` 都是对的 —— 而 `@media (prefers-color-scheme)`
+ *    是**错的**（系统深色 + 应用内显式浅色时会与宿主反色）。
+ *    ⚠️ `--accent-*` 在浅色与深色下取值**相同**；明暗差异靠"引用哪一档"表达
+ *    （浅色用 600/700，深色用 400/300）。
+ *
+ * 4. **所有令牌都要带兜底值。** Tailwind 的令牌档位是**构建期**决定的：
+ *    实测 `--color-blue-600` 有而 `--color-blue-500` 没有。兜底用 Tailwind 的
+ *    indigo 原始值，否则一个缺失的变量会让整块颜色变成 `initial`（通常是透明/黑）。
+ *
+ * 5. **z-index 被困在这个 iframe 里。** 写 `z-index: 99999` 也盖不住宿主的标题栏
+ *    （z-50）与通知浮层（z-70）。因此这里只用到 1~3，跨面板的对话交给 `ctx.ui.dialog`。
+ *
+ * 6. **减少动效与毛玻璃各有开关。** `--modulith-reduce-motion` 与 `--modulith-glass`
+ *    是宿主为插件额外注入的（值为 `"1"`/`"0"`，不是布尔）。打开时不该有过渡与
+ *    半透明背景 —— 那是无障碍设置，不是观感偏好。
+ *
+ * 类名前缀统一 `arttrace__`（BEM），刻意避开宿主的 `lc-`。
+ */
+
+/* ============================================================
+ * 0. 局部重置
+ * ============================================================
+ *
+ * 宿主没有 preflight，所以这一段是**必需**的，不是"顺手加的"。
+ * 没有 `box-sizing: border-box` 时，一个 `width: 100%` + `padding: 12px` 的输入框
+ * 会溢出它的容器 —— 而那种溢出在窄面板里表现为"输入框右边被切掉一截"。
+ */
+
+.arttrace,
+.arttrace *,
+.arttrace *::before,
+.arttrace *::after {
+  box-sizing: border-box;
+}
+
+.arttrace {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* 画布底色。iframe 自身是白的，这里刻意铺一层浅灰，让面板能"浮"起来 ——
+     否则白底 + 白面板只能靠边框区分，层次感会很弱。 */
+  --arttrace-canvas: #f5f6f9;
+  --arttrace-panel: #ffffff;
+  --arttrace-panel-alt: #fafbfd;
+  --arttrace-inset: #f3f4f8;
+  --arttrace-border: #e3e6ee;
+  --arttrace-border-strong: #d2d7e3;
+  --arttrace-text: #1f2430;
+  --arttrace-text-muted: #6b7385;
+  --arttrace-text-faint: #9aa2b4;
+  --arttrace-hover: rgba(15, 23, 42, 0.045);
+  --arttrace-active: rgba(15, 23, 42, 0.075);
+  --arttrace-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 6px 16px rgba(15, 23, 42, 0.045);
+  --arttrace-shadow-lg: 0 8px 28px rgba(15, 23, 42, 0.12);
+  --arttrace-good: #047857;
+  --arttrace-good-bg: #ecfdf5;
+  --arttrace-warn: #b45309;
+  --arttrace-warn-bg: #fffbeb;
+  --arttrace-bad: #be123c;
+  --arttrace-bad-bg: #fff1f2;
+  --arttrace-info-bg: #eef2ff;
+
+  --arttrace-accent: var(--accent-600, #4f46e5);
+  --arttrace-accent-hover: var(--accent-700, #4338ca);
+  --arttrace-accent-soft: var(--accent-50, #eef2ff);
+  --arttrace-accent-line: var(--accent-200, #c7d2fe);
+  --arttrace-accent-ring: var(--accent-100, #e0e7ff);
+  --arttrace-accent-text: var(--accent-700, #4338ca);
+
+  --arttrace-radius-sm: 6px;
+  --arttrace-radius: var(--radius-lg, 8px);
+  --arttrace-radius-lg: var(--radius-xl, 12px);
+
+  background: var(--arttrace-canvas);
+  color: var(--arttrace-text);
+  font-family: var(
+    --font-sans,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    'Microsoft YaHei',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    sans-serif
+  );
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 深色。宿主把 `.dark` 挂在插件文档的 `<html>` 上，因此 `:root.dark .arttrace`
+   是正确写法 —— 注意**不是** `.dark .arttrace`，因为宿主挂的是 html 上的类。 */
+:root.dark .arttrace {
+  --arttrace-canvas: #12161f;
+  --arttrace-panel: #1a1e2b;
+  --arttrace-panel-alt: #1e2231;
+  /* 「凹进去」的输入框比面板**更暗**，而不是更亮 —— 这是深色界面表达层级的
+     唯一可靠手段（更亮会被读成"凸出来"）。 */
+  --arttrace-inset: #0e111a;
+  --arttrace-border: #272d3d;
+  --arttrace-border-strong: #333b4f;
+  --arttrace-text: #e7eaf3;
+  --arttrace-text-muted: #99a1b7;
+  --arttrace-text-faint: #6b7488;
+  --arttrace-hover: rgba(255, 255, 255, 0.055);
+  --arttrace-active: rgba(255, 255, 255, 0.09);
+  --arttrace-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.28);
+  --arttrace-shadow-lg: 0 10px 34px rgba(0, 0, 0, 0.45);
+  --arttrace-good: #34d399;
+  --arttrace-good-bg: rgba(16, 185, 129, 0.13);
+  --arttrace-warn: #fbbf24;
+  --arttrace-warn-bg: rgba(245, 158, 11, 0.13);
+  --arttrace-bad: #fb7185;
+  --arttrace-bad-bg: rgba(244, 63, 94, 0.14);
+  --arttrace-info-bg: rgba(99, 102, 241, 0.14);
+
+  /* 深色下提一档：600 在深底上对比不足。 */
+  --arttrace-accent: var(--accent-400, #818cf8);
+  --arttrace-accent-hover: var(--accent-300, #a5b4fc);
+  --arttrace-accent-soft: rgba(99, 102, 241, 0.16);
+  --arttrace-accent-line: rgba(129, 140, 248, 0.42);
+  --arttrace-accent-ring: rgba(99, 102, 241, 0.28);
+  --arttrace-accent-text: var(--accent-300, #a5b4fc);
+}
+
+/* 无障碍：宿主把这两个开关作为自定义属性注入，值是 "1" / "0"。 */
+.arttrace * {
+  transition: none;
+}
+:root:not([style*='--modulith-reduce-motion: 0']) .arttrace * {
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
+}
+
+/* 结构性的标签一律重置 —— 没有 preflight，`h3` 会是 1.17em 粗体带外边距。 */
+.arttrace h1,
+.arttrace h2,
+.arttrace h3,
+.arttrace h4,
+.arttrace p,
+.arttrace figure,
+.arttrace pre {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.arttrace ul,
+.arttrace ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.arttrace button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.arttrace button:disabled {
+  cursor: not-allowed;
+}
+.arttrace input,
+.arttrace textarea,
+.arttrace select {
+  font: inherit;
+  color: inherit;
+}
+.arttrace code,
+.arttrace pre {
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    'SFMono-Regular',
+    'Cascadia Mono',
+    Consolas,
+    'Liberation Mono',
+    monospace
+  );
+}
+.arttrace img {
+  max-width: 100%;
+  display: block;
+}
+.arttrace a {
+  color: var(--arttrace-accent-text);
+}
+.arttrace :focus-visible {
+  outline: 2px solid var(--arttrace-accent);
+  outline-offset: 1px;
+}
+
+/* 滚动条：细、低调，且只在悬停时明显。粗重的默认滚动条会抢走内容的注意力。 */
+.arttrace__scroll {
+  overflow: auto;
+  /* flex 列里的可滚动子元素必须能**收缩到比内容更矮**，否则它会撑大父元素，
+     而父元素最终被 `.arttrace` 的 `overflow: hidden` 裁掉 —— 症状是"下面那半截
+     内容不见了，而且没有滚动条"。`min-height: 0` 是解开 flex 默认 `min-height: auto`
+     的那一把钥匙，而它在任何一本 flexbox 的坑清单里都排前三。 */
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--arttrace-border-strong) transparent;
+}
+
+/* 视图的**根**元素（视图直接返回的那一个）。让五种视图无论用哪种容器开头，
+   都占据主区的剩余高度 —— 否则"设置"页那种长内容是滚动不了的。 */
+.arttrace__main > .arttrace__scroll,
+.arttrace__main > .arttrace__col,
+.arttrace__main > .arttrace__stack {
+  flex: 1;
+  min-height: 0;
+}
+.arttrace__scroll::-webkit-scrollbar,
+.arttrace__code-body::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.arttrace__scroll::-webkit-scrollbar-thumb,
+.arttrace__code-body::-webkit-scrollbar-thumb {
+  background: var(--arttrace-border-strong);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
+.arttrace__scroll::-webkit-scrollbar-track,
+.arttrace__code-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============================================================
+ * 1. 外壳
+ * ============================================================ */
+
+.arttrace__shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* 左侧导航。窄而稳：它只负责切换功能区，不承载任何状态。 */
+.arttrace__rail {
+  width: 172px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  background: var(--arttrace-panel);
+  border-right: 1px solid var(--arttrace-border);
+}
+
+.arttrace__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 12px;
+}
+.arttrace__brand-mark {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--arttrace-accent-soft);
+  color: var(--arttrace-accent);
+  border: 1px solid var(--arttrace-accent-line);
+}
+.arttrace__brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.arttrace__brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.arttrace__brand-version {
+  font-size: 11px;
+  color: var(--arttrace-text-faint);
+  white-space: nowrap;
+}
+
+.arttrace__rail-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--arttrace-radius);
+  color: var(--arttrace-text-muted);
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+.arttrace__rail-btn:hover {
+  background: var(--arttrace-hover);
+  color: var(--arttrace-text);
+}
+.arttrace__rail-btn.is-active {
+  background: var(--arttrace-accent-soft);
+  color: var(--arttrace-accent-text);
+  font-weight: 600;
+}
+.arttrace__rail-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--arttrace-active);
+  color: var(--arttrace-text-muted);
+}
+.arttrace__rail-btn.is-active .arttrace__rail-badge {
+  background: var(--arttrace-accent-line);
+  color: var(--arttrace-accent-text);
+}
+.arttrace__rail-foot {
+  margin-top: auto;
+  padding: 8px 10px 2px;
+  font-size: 11px;
+  color: var(--arttrace-text-faint);
+  border-top: 1px solid var(--arttrace-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arttrace__main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  gap: 12px;
+}
+
+/* 视图内的工具条：标题 + 动作。所有视图都以它开头，因此各视图的"头"长得一样。 */
+.arttrace__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.arttrace__bar-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.arttrace__bar-sub {
+  font-size: 12px;
+  color: var(--arttrace-text-muted);
+}
+.arttrace__bar-spacer {
+  flex: 1;
+}
+
+/* 两栏：左边列表、右边详情。第二栏可以更宽。 */
+.arttrace__split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 12px;
+}
+.arttrace__split--wide-right {
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+}
+.arttrace__split--even {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.arttrace__split--wide-left {
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 1fr);
+}
+.arttrace__col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.arttrace__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 8px;
+}
+.arttrace__grid--wide {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.arttrace__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px 12px;
+}
+.arttrace__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.arttrace__row--wrap {
+  flex-wrap: wrap;
+}
+.arttrace__row--between {
+  justify-content: space-between;
+}
+.arttrace__grow {
+  flex: 1;
+  min-width: 0;
+}
+.arttrace__stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.arttrace__stack--tight {
+  gap: 6px;
+}
+.arttrace__sep {
+  height: 1px;
+  background: var(--arttrace-border);
+  margin: 2px 0;
+}
+.arttrace__muted {
+  color: var(--arttrace-text-muted);
+}
+.arttrace__faint {
+  color: var(--arttrace-text-faint);
+}
+.arttrace__mono {
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    'SFMono-Regular',
+    'Cascadia Mono',
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+  word-break: break-all;
+}
+.arttrace__nowrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+ * 2. 面板
+ * ============================================================ */
+
+.arttrace__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--arttrace-panel);
+  border: 1px solid var(--arttrace-border);
+  border-radius: var(--arttrace-radius-lg);
+  box-shadow: var(--arttrace-shadow);
+  overflow: hidden;
+}
+.arttrace__panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--arttrace-border);
+  background: var(--arttrace-panel-alt);
+  flex: 0 0 auto;
+}
+.arttrace__panel-title {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--arttrace-text);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.arttrace__panel-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.arttrace__panel-body {
+  padding: 13px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.arttrace__panel-body--flush {
+  padding: 0;
+  gap: 0;
+}
+
+/* 让面板内部可滚动的那一块自己撑开，而不是把面板顶大。 */
+.arttrace__panel--fill {
+  flex: 1;
+  min-height: 0;
+}
+.arttrace__panel--fill .arttrace__panel-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+ * 3. 按钮
+ * ============================================================ */
+
+.arttrace__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--arttrace-radius);
+  border: 1px solid var(--arttrace-border-strong);
+  background: var(--arttrace-panel);
+  color: var(--arttrace-text);
+  font-size: 12.5px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.arttrace__btn:hover:not(:disabled) {
+  background: var(--arttrace-hover);
+  border-color: var(--arttrace-accent-line);
+}
+.arttrace__btn:active:not(:disabled) {
+  background: var(--arttrace-active);
+}
+.arttrace__btn:disabled {
+  opacity: 0.5;
+}
+.arttrace__btn--sm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  border-radius: var(--arttrace-radius-sm);
+}
+.arttrace__btn--primary {
+  background: var(--arttrace-accent);
+  border-color: var(--arttrace-accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.28);
+}
+:root.dark .arttrace__btn--primary {
+  color: #10131c;
+  box-shadow: none;
+}
+.arttrace__btn--primary:hover:not(:disabled) {
+  background: var(--arttrace-accent-hover);
+  border-color: var(--arttrace-accent-hover);
+}
+.arttrace__btn--subtle {
+  border-color: transparent;
+  background: transparent;
+  color: var(--arttrace-text-muted);
+}
+.arttrace__btn--subtle:hover:not(:disabled) {
+  background: var(--arttrace-hover);
+  color: var(--arttrace-text);
+  border-color: transparent;
+}
+.arttrace__btn--danger {
+  color: var(--arttrace-bad);
+  border-color: var(--arttrace-border-strong);
+}
+.arttrace__btn--danger:hover:not(:disabled) {
+  background: var(--arttrace-bad-bg);
+  border-color: var(--arttrace-bad);
+}
+.arttrace__btn.is-active {
+  background: var(--arttrace-accent-soft);
+  border-color: var(--arttrace-accent-line);
+  color: var(--arttrace-accent-text);
+}
+.arttrace__btn--block {
+  width: 100%;
+}
+.arttrace__btn-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.arttrace__btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+ * 4. 表单
+ * ============================================================ */
+
+.arttrace__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.arttrace__field--wide {
+  grid-column: 1 / -1;
+}
+.arttrace__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--arttrace-text-muted);
+  letter-spacing: 0.01em;
+}
+.arttrace__hint {
+  font-size: 11px;
+  color: var(--arttrace-text-faint);
+  line-height: 1.5;
+}
+
+.arttrace__input,
+.arttrace__textarea,
+.arttrace__select {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--arttrace-radius);
+  border: 1px solid var(--arttrace-border-strong);
+  background: var(--arttrace-inset);
+  color: var(--arttrace-text);
+  font-size: 12.5px;
+}
+.arttrace__input::placeholder,
+.arttrace__textarea::placeholder {
+  color: var(--arttrace-text-faint);
+}
+.arttrace__input:focus,
+.arttrace__textarea:focus,
+.arttrace__select:focus {
+  outline: none;
+  border-color: var(--arttrace-accent);
+  box-shadow: 0 0 0 3px var(--arttrace-accent-ring);
+}
+.arttrace__input:disabled,
+.arttrace__textarea:disabled {
+  opacity: 0.55;
+}
+.arttrace__input.is-mono,
+.arttrace__textarea.is-mono {
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    'SFMono-Regular',
+    'Cascadia Mono',
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+}
+.arttrace__textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.6;
+}
+
+.arttrace__select-wrap {
+  position: relative;
+  display: block;
+}
+.arttrace__select {
+  appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+}
+/* 自绘下拉箭头：`appearance: none` 之后 UA 的箭头没了，而用背景图会在 CSP 下
+   加载失败（`img-src` 不含外部主机）。一个 CSS 三角形是最省事且一定生效的做法。 */
+.arttrace__select-caret {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  margin-top: -2px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--arttrace-text-muted);
+  pointer-events: none;
+}
+
+.arttrace__number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.arttrace__number .arttrace__input {
+  flex: 1;
+  min-width: 0;
+}
+.arttrace__number-suffix {
+  font-size: 11.5px;
+  color: var(--arttrace-text-faint);
+  flex: 0 0 auto;
+}
+
+/* 开关 */
+.arttrace__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.arttrace__toggle.is-disabled {
+  opacity: 0.55;
+}
+.arttrace__switch {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--arttrace-border-strong);
+  position: relative;
+}
+.arttrace__switch.is-on {
+  background: var(--arttrace-accent);
+}
+.arttrace__switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+:root.dark .arttrace__switch-knob {
+  background: #e7eaf3;
+}
+.arttrace__switch.is-on .arttrace__switch-knob {
+  left: 16px;
+}
+.arttrace__toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.arttrace__toggle-label {
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+/* 分段选择器 */
+.arttrace__seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--arttrace-radius);
+  background: var(--arttrace-inset);
+  border: 1px solid var(--arttrace-border);
+}
+.arttrace__seg-item {
+  padding: 4px 10px;
+  border-radius: var(--arttrace-radius-sm);
+  font-size: 11.5px;
+  color: var(--arttrace-text-muted);
+  white-space: nowrap;
+}
+.arttrace__seg-item:hover {
+  color: var(--arttrace-text);
+}
+.arttrace__seg-item.is-active {
+  background: var(--arttrace-panel);
+  color: var(--arttrace-accent-text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+/* ============================================================
+ * 5. 展示件
+ * ============================================================ */
+
+.arttrace__kv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  min-width: 0;
+}
+.arttrace__kv-key {
+  flex: 0 0 auto;
+  width: 92px;
+  font-size: 11.5px;
+  color: var(--arttrace-text-muted);
+}
+.arttrace__kv-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  word-break: break-word;
+}
+.arttrace__kv-value.is-mono {
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    'SFMono-Regular',
+    'Cascadia Mono',
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+.arttrace__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 11px;
+  border-radius: var(--arttrace-radius);
+  background: var(--arttrace-panel-alt);
+  border: 1px solid var(--arttrace-border);
+  min-width: 0;
+}
+.arttrace__stat-value {
+  font-size: 17px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.arttrace__stat-label {
+  font-size: 11px;
+  color: var(--arttrace-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arttrace__stat--good .arttrace__stat-value {
+  color: var(--arttrace-good);
+}
+.arttrace__stat--warn .arttrace__stat-value {
+  color: var(--arttrace-warn);
+}
+.arttrace__stat--bad .arttrace__stat-value {
+  color: var(--arttrace-bad);
+}
+.arttrace__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.arttrace__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--arttrace-active);
+  color: var(--arttrace-text-muted);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+/* 语义色。生成参数用强调色（它是最重要的那一类），其余按"危险程度"递减。 */
+.arttrace__tag--generator {
+  background: var(--arttrace-accent-soft);
+  color: var(--arttrace-accent-text);
+  border-color: var(--arttrace-accent-line);
+}
+.arttrace__tag--exif {
+  background: var(--arttrace-warn-bg);
+  color: var(--arttrace-warn);
+}
+.arttrace__tag--xmp {
+  background: rgba(14, 165, 233, 0.14);
+  color: #0369a1;
+}
+:root.dark .arttrace__tag--xmp {
+  color: #7dd3fc;
+}
+.arttrace__tag--c2pa {
+  background: var(--arttrace-bad-bg);
+  color: var(--arttrace-bad);
+}
+.arttrace__tag--icc {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--arttrace-good);
+}
+.arttrace__tag--text {
+  background: rgba(100, 116, 139, 0.16);
+  color: var(--arttrace-text-muted);
+}
+.arttrace__tag--structural {
+  background: var(--arttrace-active);
+  color: var(--arttrace-text-faint);
+}
+.arttrace__tag--other {
+  background: var(--arttrace-active);
+  color: var(--arttrace-text-muted);
+}
+.arttrace__tag--good {
+  background: var(--arttrace-good-bg);
+  color: var(--arttrace-good);
+}
+.arttrace__tag--bad {
+  background: var(--arttrace-bad-bg);
+  color: var(--arttrace-bad);
+}
+.arttrace__tag--mono {
+  font-family: var(--font-mono, ui-monospace, Consolas, monospace);
+  letter-spacing: 0;
+}
+
+.arttrace__banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: var(--arttrace-radius);
+  border: 1px solid var(--arttrace-border);
+  background: var(--arttrace-panel-alt);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.arttrace__banner-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.arttrace__banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.arttrace__banner-action {
+  flex: 0 0 auto;
+}
+.arttrace__banner--info {
+  background: var(--arttrace-info-bg);
+  border-color: var(--arttrace-accent-line);
+  color: var(--arttrace-accent-text);
+}
+.arttrace__banner--warn {
+  background: var(--arttrace-warn-bg);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--arttrace-warn);
+}
+.arttrace__banner--error {
+  background: var(--arttrace-bad-bg);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: var(--arttrace-bad);
+}
+.arttrace__banner--success {
+  background: var(--arttrace-good-bg);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: var(--arttrace-good);
+}
+
+.arttrace__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--arttrace-radius);
+  font-size: 12px;
+  border: 1px solid transparent;
+}
+.arttrace__notice-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+.arttrace__notice-close {
+  flex: 0 0 auto;
+  opacity: 0.6;
+  padding: 1px;
+  border-radius: 4px;
+}
+.arttrace__notice-close:hover {
+  opacity: 1;
+  background: var(--arttrace-hover);
+}
+.arttrace__notice--info {
+  background: var(--arttrace-info-bg);
+  color: var(--arttrace-accent-text);
+}
+.arttrace__notice--warn {
+  background: var(--arttrace-warn-bg);
+  color: var(--arttrace-warn);
+}
+.arttrace__notice--error {
+  background: var(--arttrace-bad-bg);
+  color: var(--arttrace-bad);
+}
+.arttrace__notice--success {
+  background: var(--arttrace-good-bg);
+  color: var(--arttrace-good);
+}
+.arttrace__notices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* 空状态。宿主的实测样式是"图标 gray-300 + 文字 gray-500 + 大内边距" */
+.arttrace__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 46px 20px;
+  text-align: center;
+}
+.arttrace__empty-icon {
+  color: var(--arttrace-text-faint);
+  opacity: 0.75;
+}
+.arttrace__empty-title {
+  font-size: 12.5px;
+  color: var(--arttrace-text-muted);
+  max-width: 34em;
+}
+.arttrace__empty-hint {
+  font-size: 11.5px;
+  color: var(--arttrace-text-faint);
+  max-width: 34em;
+  line-height: 1.6;
+}
+.arttrace__empty-action {
+  margin-top: 4px;
+}
+
+/* 加载态：四条脉冲竖条，与宿主一致。刻意不用转圈的大 spinner。 */
+.arttrace__loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--arttrace-text-muted);
+  font-size: 11.5px;
+}
+.arttrace__loading-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.arttrace__loading-bars i {
+  display: block;
+  width: 2px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--arttrace-accent);
+  opacity: 0.5;
+  animation: arttrace-pulse 1s ease-in-out infinite;
+}
+.arttrace__loading-bars i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.arttrace__loading-bars i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.arttrace__loading-bars i:nth-child(4) {
+  animation-delay: 0.45s;
+}
+@keyframes arttrace-pulse {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+/* 减少动效是无障碍设置，不是观感偏好 —— 关掉动画，保留可见性。 */
+:root:not([style*='--modulith-reduce-motion: 0']) .arttrace__loading-bars i {
+  animation: none;
+  opacity: 0.6;
+}
+.arttrace__loading-text {
+  min-width: 0;
+}
+
+.arttrace__progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.arttrace__progress-track {
+  flex: 1;
+  min-width: 0;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--arttrace-inset);
+  overflow: hidden;
+  border: 1px solid var(--arttrace-border);
+}
+.arttrace__progress-bar {
+  height: 100%;
+  background: var(--arttrace-accent);
+  border-radius: 999px;
+}
+.arttrace__progress-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--arttrace-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 标签页 */
+.arttrace__tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--arttrace-border);
+  padding: 0 2px;
+  flex: 0 0 auto;
+}
+.arttrace__tab {
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--arttrace-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.arttrace__tab:hover {
+  color: var(--arttrace-text);
+}
+.arttrace__tab.is-active {
+  color: var(--arttrace-accent-text);
+  border-bottom-color: var(--arttrace-accent);
+  font-weight: 600;
+}
+.arttrace__tab-badge {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--arttrace-active);
+  color: var(--arttrace-text-muted);
+}
+
+/* 代码块 */
+.arttrace__code {
+  border: 1px solid var(--arttrace-border);
+  border-radius: var(--arttrace-radius);
+  background: var(--arttrace-inset);
+  overflow: hidden;
+}
+.arttrace__code-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border-bottom: 1px solid var(--arttrace-border);
+  background: var(--arttrace-panel-alt);
+}
+.arttrace__code-size {
+  flex: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--arttrace-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.arttrace__code-body {
+  margin: 0;
+  padding: 9px 11px;
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    'SFMono-Regular',
+    'Cascadia Mono',
+    Consolas,
+    monospace
+  );
+  font-size: 11.5px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--arttrace-text);
+}
+
+/* ============================================================
+ * 6. 表格
+ * ============================================================ */
+
+.arttrace__table-wrap {
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+.arttrace__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.arttrace__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  color: var(--arttrace-text-muted);
+  background: var(--arttrace-panel-alt);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--arttrace-border);
+  white-space: nowrap;
+}
+.arttrace__table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--arttrace-border);
+  vertical-align: top;
+  min-width: 0;
+}
+.arttrace__table.is-dense td,
+.arttrace__table.is-dense th {
+  padding: 4px 8px;
+}
+.arttrace__table tbody tr:hover {
+  background: var(--arttrace-hover);
+}
+.arttrace__table tbody tr.is-selected {
+  background: var(--arttrace-accent-soft);
+}
+.arttrace__table tbody tr.is-clickable {
+  cursor: pointer;
+}
+.arttrace__table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.arttrace__table-empty {
+  padding: 26px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--arttrace-text-faint);
+}
+.arttrace__table-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+ * 7. 缩略图列表
+ * ============================================================ */
+
+.arttrace__thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--arttrace-border);
+  border-radius: var(--arttrace-radius);
+  overflow: hidden;
+  background: var(--arttrace-panel);
+  text-align: left;
+}
+.arttrace__thumb:hover {
+  border-color: var(--arttrace-accent-line);
+}
+.arttrace__thumb.is-selected {
+  border-color: var(--arttrace-accent);
+  box-shadow: 0 0 0 2px var(--arttrace-accent-ring);
+}
+.arttrace__thumb.is-picked-off {
+  opacity: 0.55;
+}
+.arttrace__thumb-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--arttrace-inset);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.arttrace__thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.arttrace__thumb-meta {
+  padding: 5px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--arttrace-border);
+}
+.arttrace__thumb-name {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arttrace__thumb-sub {
+  font-size: 10px;
+  color: var(--arttrace-text-faint);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.arttrace__thumb-flags {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  right: 5px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+.arttrace__thumb-pick {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--arttrace-border-strong);
+  background: var(--arttrace-panel);
+  display: grid;
+  place-items: center;
+  z-index: 2;
+}
+.arttrace__thumb-pick.is-on {
+  background: var(--arttrace-accent);
+  border-color: var(--arttrace-accent);
+  color: #fff;
+}
+:root.dark .arttrace__thumb-pick.is-on {
+  color: #10131c;
+}
+
+/* 行式列表（批量队列/台账）里的一张小预览 */
+.arttrace__mini {
+  width: 34px;
+  height: 34px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--arttrace-inset);
+  border: 1px solid var(--arttrace-border);
+  flex: 0 0 auto;
+}
+
+/* 详情里的大预览 */
+.arttrace__preview {
+  position: relative;
+  width: 100%;
+  border-radius: var(--arttrace-radius);
+  border: 1px solid var(--arttrace-border);
+  background:
+    linear-gradient(45deg, var(--arttrace-inset) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, var(--arttrace-inset) 25%, transparent 25%) 0 8px / 16px 16px,
+    linear-gradient(45deg, transparent 75%, var(--arttrace-inset) 75%) 8px -8px / 16px 16px,
+    linear-gradient(-45deg, transparent 75%, var(--arttrace-inset) 75%) -8px 0 / 16px 16px,
+    var(--arttrace-panel);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-height: 120px;
+}
+.arttrace__preview img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+/* 提示词那一类长文本 */
+.arttrace__prompt {
+  border: 1px solid var(--arttrace-border);
+  border-radius: var(--arttrace-radius);
+  background: var(--arttrace-inset);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+
+/* 参数高亮卡 */
+.arttrace__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 9px;
+  border-radius: var(--arttrace-radius-sm);
+  background: var(--arttrace-panel-alt);
+  border: 1px solid var(--arttrace-border);
+  min-width: 0;
+}
+.arttrace__chip-key {
+  font-size: 10px;
+  color: var(--arttrace-text-faint);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.arttrace__chip-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arttrace__chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px;
+}
+
+/* 水印预览的画布容器 */
+.arttrace__canvas-wrap {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: var(--arttrace-radius);
+  border: 1px solid var(--arttrace-border);
+  background: var(--arttrace-inset);
+}
+.arttrace__canvas-wrap canvas,
+.arttrace__canvas-wrap img {
+  max-width: 100%;
+  max-height: 380px;
+  border-radius: var(--arttrace-radius-sm);
+  box-shadow: var(--arttrace-shadow);
+}

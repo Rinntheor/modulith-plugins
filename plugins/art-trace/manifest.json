@@ -1,0 +1,59 @@
+{
+  "name": "com.rinntheor.modulith.art-trace",
+  "displayName": "影像元数据工坊",
+  "version": "1.0.0",
+  "description": "查清一张图里到底有什么：解析 ComfyUI / Stable Diffusion / NovelAI 的生成参数、EXIF、XMP 与容器里的每一个块；按需无损抹除痕迹并追加作者信息；打上可见水印与可追踪的隐形水印；每一份成品都留下台账，事后能查出当初发给了谁。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/art-trace",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "图像",
+    "隐私",
+    "创作"
+  ],
+  "keywords": [
+    "metadata",
+    "exif",
+    "xmp",
+    "comfyui",
+    "stable-diffusion",
+    "watermark",
+    "privacy",
+    "provenance"
+  ],
+  "engines": {
+    "modulith": ">=1.6.3"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage",
+    "plugin-data",
+    "filesystem-read",
+    "filesystem-scoped",
+    "notification"
+  ],
+  "contributes": {
+    "modules": [
+      {
+        "id": "artTraceView",
+        "name": "影像元数据工坊",
+        "description": "查清图里的每一个元数据块，抹掉痕迹，打上可追踪的水印，并留下台账",
+        "icon": "Fingerprint",
+        "priority": 58
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:artTraceView"
+  ]
+}
