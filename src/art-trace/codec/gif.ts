@@ -125,8 +125,6 @@ export function parseGif(bytes: Uint8Array): FormatParse {
   while (at < bytes.length) {
     const introducer = bytes[at];
     const start = at;
-    // eslint-disable-next-line no-console
-    console.log('[G]', at, introducer === undefined ? 'EOF' : '0x' + introducer.toString(16));
 
     if (introducer === 0x3b) {
       // 结束块。它也是逐字节搬运的 —— 少了它，所有解码器都认为文件被截断
@@ -136,7 +134,7 @@ export function parseGif(bytes: Uint8Array): FormatParse {
         block: {
           id: `gif:trailer:${start}`,
           selector: 'Trailer',
-          label: 'Trailer（文件结束）',
+          label: 'Trailer（结束块 0x3B）',
           group: 'structural',
           text: '文件结束块（0x3B）',
           bytes: 1,
@@ -161,14 +159,27 @@ export function parseGif(bytes: Uint8Array): FormatParse {
       const hasLocal = (framePacked & 0x80) !== 0;
       const localBits = (framePacked & 0x07) + 1;
       const localBytes = hasLocal ? (1 << localBits) * 3 : 0;
-      let cursor = at + 10 + localBytes;
       if (hasLocal) {
         state.hasLocalPalette = true;
         state.localPaletteBits = Math.max(state.localPaletteBits, localBits);
       }
-      const subBlocks = skipSubBlocks(bytes, cursor);
-      // eslint-disable-next-line no-console
-      console.log('[I] cursor=', cursor, 'subBlocks=', subBlocks, 'localBytes=', localBytes, 'bytes.length=', bytes.length, 'at=', at);
+
+      // 图像数据的布局是：**1 个字节的 LZW 最小码长**，然后才是子块链。
+      //
+      // 这个最小码长字节是这条链上最容易漏掉的一个字节，而漏掉它的后果**不是**
+      // "少读一个字节"这么轻：链的起点整体前移一位，于是第一个"子块长度"读到的
+      // 是最小码长本身（1..8），接着一路错位。它会在某个字节上撞见一个 0x00 并
+      // 把它当成链的结束标记 —— 得到的是**一个完全错误的图像数据长度**，然后
+      // 文件剩余部分被判定成"无法解析"，用户看到的是"你的文件被截断了"。
+      // 真实的 ffmpeg 输出（256×336、含局部调色板）踩的正是这个坑。
+      const minCodeSizeAt = at + 10 + localBytes;
+      if (minCodeSizeAt >= bytes.length) {
+        notes.push(`位置 ${at} 的图像数据没有 LZW 最小码长字节（截断）`);
+        break;
+      }
+      const subBlockStart = minCodeSizeAt + 1;
+      const subBlocks = skipSubBlocks(bytes, subBlockStart);
+      let cursor: number;
       if (subBlocks === -1) {
         // 子块链没有结束的 0。把剩下的字节全收成这一块，并在这里停下 ——
         // 继续往前找块只会在垃圾里乱撞，找出根本不存在的"帧"
@@ -187,8 +198,8 @@ export function parseGif(bytes: Uint8Array): FormatParse {
           label: `图像描述符（${frameWidth}×${frameHeight}）`,
           group: 'structural',
           // 图像数据是 LZW 压缩的，我们不解压 —— 这里只报告它的位置与大小
-          text: `第 ${state.frames} 帧，${frameWidth}×${frameHeight}，LZW 图像数据 ${formatBytes(
-            Math.max(0, cursor - (at + 10 + localBytes))
+          text: `第 ${state.frames} 帧，${frameWidth}×${frameHeight}，LZW 最小码长 ${bytes[minCodeSizeAt]}，图像数据 ${formatBytes(
+            Math.max(0, cursor - subBlockStart)
           )}${hasLocal ? `，含局部调色板 ${1 << localBits} 色` : ''}`,
           bytes: cursor - start,
           removable: false,
@@ -495,9 +506,10 @@ function skipSubBlocks(bytes: Uint8Array, from: number): number {
   let at = from;
   while (at < bytes.length) {
     const size = bytes[at];
-    at += 1;
-    if (size === 0) return at; // 结束标记
-    at += size;
+    // 长度为 0 就是链的结束；返回它**之后**那个偏移（也就是下一个块的引导字节）
+    if (size === 0) return at + 1;
+    // 一个子块占 1 + size 字节（长度字节本身 + 数据）
+    at += 1 + size;
   }
   return -1;
 }
@@ -627,7 +639,12 @@ function rebuildGif(blocks: GifBlock[], options: RebuildOptions): Uint8Array {
       writer.bytes(item.raw);
       continue;
     }
-    if (options.drop.has(item.block.selector)) continue;
+    // **结构性块永远保留，哪怕 drop 里点了名。** 头部/逻辑屏幕/调色板/图形控制/
+    // 图像数据/结束块，少任何一个都是坏文件；`NETSCAPE2.0` 的循环次数也在这里
+    // （丢了动画只播一遍）。这条不变量守在这一层而不是策略层 —— `rebuild` 是公开
+    // 接口，将来任何调用方都能绕过 `clean/plan.ts` 直接点名。
+    // （与 PNG 模块一致：PNG 也拒绝丢掉 IHDR/IDAT/IEND。）
+    if (!item.block.structural && options.drop.has(item.block.selector)) continue;
     writer.bytes(item.raw);
   }
 

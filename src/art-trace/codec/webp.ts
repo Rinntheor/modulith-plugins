@@ -526,9 +526,14 @@ function rebuildWebp(chunks: WebpChunk[], options: RebuildOptions): Uint8Array {
   const relevant: WebpChunk[] = [];
   let vp8x: WebpChunk | null = null;
   for (const chunk of chunks) {
-    if (options.drop.has(chunk.block.selector)) continue;
+    // **结构性 chunk 永远保留，哪怕 drop 里点了名。** 这条不变量守在这里而不是
+    // 策略层：`VP8X`/`VP8 `/`VP8L`/`ALPH`/`ANIM`/`ANMF` 少一个就是一张坏图或一段
+    // 坏动画，而 `rebuild` 是公开接口 —— 安全网必须放在最后一个能拦住它的地方。
+    // （与 PNG 模块一致：PNG 也拒绝丢掉 IHDR/IDAT/IEND。）
+    if (!chunk.block.structural && options.drop.has(chunk.block.selector)) continue;
     if (chunk.fourcc === 'VP8X') {
-      // VP8X 是结构性的，正常情况下不会被丢；万一真被丢了，就整份文件都不写它
+      // VP8X 有两个身份：它是"扩展格式头"（结构性），同时它的 flags 又要按最终
+      // 留下的 chunk 重算。因此这里单独收下、稍后重写，而不是直接搬
       vp8x = chunk;
       continue;
     }

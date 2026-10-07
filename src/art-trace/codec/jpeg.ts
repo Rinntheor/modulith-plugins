@@ -259,6 +259,7 @@ export function parseJpeg(bytes: Uint8Array): FormatParse {
           orientation: null,
         },
         raw,
+        isEntropy: false,
       });
       break;
     }
@@ -279,6 +280,7 @@ export function parseJpeg(bytes: Uint8Array): FormatParse {
           orientation: null,
         },
         raw,
+        isEntropy: false,
       });
       at = next;
       continue;
@@ -935,7 +937,13 @@ function rebuildJpeg(
       // "SOS 到这里结束了"，但追加内容已经在段头之前写完了
       continue;
     }
-    if (options.drop.has(segment.block.selector)) continue;
+    // **结构性段永远保留，哪怕 drop 里点了名。**
+    //
+    // 这条不变量守在这一层而不是策略层：`clean/plan.ts` 确实不会把 SOF/DHT/DQT/DRI
+    // 放进 drop，但那是"当前调用方很小心"，而 `rebuild` 是公开接口 —— 任何将来的
+    // 调用方都能绕过策略直接点名。把安全网放在这里，它才是一条**不变量**而不是一个
+    // 约定；而且这与 PNG 模块一致（PNG 同样拒绝丢掉 IHDR/IDAT/IEND）。
+    if (!segment.block.structural && options.drop.has(segment.block.selector)) continue;
     if (segment.block.selector === 'APP1:Exif') exifKept = true;
     // 段头（`FFDA`）是最后一个保留段，追加内容插在它前面
     if (segment.block.selector === SOS_SELECTOR) flushAppended();
