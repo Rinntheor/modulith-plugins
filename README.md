@@ -11,7 +11,8 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 
 ```
 .
-├── plugins/            插件：一个插件一个目录（清单、资源、以及 index.js）
+├── plugins/            插件：一个插件一个目录（清单、资源、以及 index.js），当前 11 个；
+│                       下面列 4 个作例子
 │   ├── hello/          参考插件：把所有约定示范一遍的最小完整形态
 │   ├── notes/          文本速记：只用 storage 的完整插件
 │   ├── pomodoro/       番茄工作钟：后台计时 + 应用内通知 + 自定义提示音
@@ -19,7 +20,8 @@ Modulith Desktop 的第一方插件生态仓库。这里存放插件的源码与
 ├── src/                可选的多文件源码，一个插件一个目录（见 src/README.md）
 │   └── kanban/         看板的源码；它的产物是 plugins/kanban/index.js
 ├── types/              插件 API 的类型声明（modulith.d.ts）
-├── dist/               构建产物 .lcp
+├── dist/               构建产物 .lcp：新版本在 dist/<插件目录名>/<版本号>.lcp，
+│                       历史版本仍是平铺的 dist/<插件 ID>-<版本号>.lcp（见 dist/README.md）
 ├── scripts/            打包与索引生成
 │   ├── tsconfig.json   脚本自己的类型配置（带 Node 类型，与根部那份分开）
 │   └── watch.ts        npm run dev 的实现
@@ -41,8 +43,10 @@ npm run typecheck              # 类型检查，只覆盖 src/ 与 types/ 下的
 npm run check:scripts          # 构建脚本自身的类型检查（这份带 Node 类型）
 ```
 
-`npm run dev` 只保证**磁盘上的产物永远是最新的**；宿主侧仍需让插件重新加载才会生效。
-宿主的开发模式热重载是 v1.5 的目标之一，尚未实现。
+`npm run dev` 只保证**磁盘上的产物永远是最新的**。产物一变，**开发链接的插件**（从本地
+目录安装的那种）会被宿主自动重新加载 —— 宿主侧轮询产物变化并重载插件运行时（应用仓库
+`src/services/pluginDevWatch.ts`）。从 `.lcp` 安装的插件不在自动重载范围内，那种情况需要
+重新安装或让插件重新加载。
 
 **构建脚本本身零依赖**，只需要 Node 23.6 以上（脚本是 TypeScript，由 Node 直接执行，
 不经过编译）—— 手写单文件插件走的就是这条路。仓库里的 devDependency 只服务
@@ -113,6 +117,10 @@ npm run check:scripts          # 构建脚本自身的类型检查（这份带 N
 放在 React 之外并用通知提醒，`quick-launch` 演示需要宿主原生能力的那一类。它们既是可用的
 插件，也是可以照着读的源码 —— 应用仓库里还有一份更小的、只示范核心接口的参考插件
 `modulith-desktop/samples/reference`。
+
+其余六个是功能插件：`kanban`（看板，源码在 `src/`）、`stand-up`、`color-lab`、`encode-lab`、
+`regex-lab`、`typing-practice`、`art-trace`（影像元数据工坊）。它们同样可以当例子读 ——
+「功能型插件怎么登记收尾」「`ctx.files` 的当场授权怎么用」这类问题的答案都在里面。
 
 ## 贡献
 
