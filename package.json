@@ -13,6 +13,7 @@
     "release": "node scripts/release.ts",
     "release:check": "node scripts/release.ts --check",
     "release:tags": "node scripts/release.ts --tags-only",
+    "release:prune-tags": "node scripts/release.ts --prune-tags",
     "release:push": "node scripts/release.ts --push",
     "release:verify": "node scripts/release.ts --verify",
     "typecheck": "tsc --noEmit",

@@ -531,7 +531,7 @@ function stringifyIndex(index: Index): string {
  * 工作区里已经不存在的插件目录会被整体移出索引（那表示插件被下架），调用方负责
  * 把这件事报出来 —— 静默消失是最难排查的一类问题。
  */
-function buildIndex(previous: Index | null, fresh: readonly FreshPlugin[]): Index {
+function buildIndex(fresh: readonly FreshPlugin[]): Index {
   const byDir = new Map(fresh.map((item) => [item.dirName, item]));
   const plugins: IndexPlugin[] = [];
 
@@ -540,10 +540,32 @@ function buildIndex(previous: Index | null, fresh: readonly FreshPlugin[]): Inde
     if (!item) continue; // 同一来源，不应发生
     const { manifest, version } = item;
 
-    const older = (previous?.plugins.find((p) => p.id === manifest.name)?.versions ?? []).filter(
-      (v) => v.version !== version.version
-    );
-    const versions = [...older, version].sort((a, b) => compareVersions(b.version, a.version));
+    // ============================================================
+    // 索引里**只保留当前版本**（2026 的政策变更）
+    // ============================================================
+    //
+    // 此前这里把索引里已有的旧版本一并带上（`older`），理由是"工作区里只有当前
+    // 版本的源码，直接重建会让旧版本连同它的哈希一起消失"。
+    //
+    // 那个理由本身成立，但它换来的是一个**没有任何消费方**的历史：客户端只安装
+    // `latest`（`latestVersionOf()` 是市场唯一的入口，`planUpdate()` 第一行就是它，
+    // 全仓没有任何"选一个版本"的界面）。而代价是**每个版本一条不可变 tag** ——
+    // 32 个版本就是 32 个 tag，插件数量上去之后 tag 线性膨胀：每个 ref 都要推送、
+    // 都要被 CDN 建缓存，而它们全部指向永远不会被拉取的内容。
+    //
+    // 现在的取舍是**三件事各归其位，谁都不重复**：
+    //
+    //   * 索引只回答"现在该装哪一版" —— 一个插件一条，tag 因此也只剩一条；
+    //   * 历史产物留在 `dist/` 里归档（不再被索引引用，因此也不再被 `--check` 校验）；
+    //   * "某个版本当时发的是什么"由 **git 历史里的 `index.json`** 回答 ——
+    //     每一次发布都改过它，旧条目连同 sha256 全在历史里，`git log -p index.json`
+    //     查得到，`git checkout <那个提交>` 就能逐字节核对。
+    //
+    // 代价如实写下：**历史版本不再可安装**（没有 tag 就没有不可变地址，`@main`
+    // 地址是可变且按小时缓存的，不能拿来当版本标识）。这是一个有意的取舍 ——
+    // 客户端从来不安装旧版本，而维护者要"查当时发了什么"时，git 历史比 index
+    // 更完整。
+    const versions = [version];
 
     const iconPath =
       manifest.icon && manifest.icon.endsWith('.svg') ? `plugins/${dirName}/${manifest.icon}` : undefined;
@@ -803,7 +825,7 @@ async function main(): Promise<number> {
   }
 
   // ---- 5. 生成索引并复核 ----
-  const index = buildIndex(previous ?? { schemaVersion: SCHEMA_VERSION, plugins: [] }, fresh);
+  const index = buildIndex(fresh);
 
   // 新包此刻已在位，因此这一步能抓住「手工改过 index.json」与「dist 里的包被换」两类问题。
   const mismatches = verifyIndexArtifacts(index);
@@ -814,12 +836,33 @@ async function main(): Promise<number> {
   }
 
   reportDropped(previous, index);
-  writeFileSync(INDEX_FILE, stringifyIndex(index));
 
+  // ============================================================
+  // 内容没变就**不重写**索引（这条不是洁癖）
+  // ============================================================
+  //
+  // 此前这里无条件 `writeFileSync`。而 `index.json` 的修改时间是 `--check` 里
+  // **唯一**能判断"索引改了没重新签名"的依据（签名本身验不了，见
+  // `signatureProblem`）。于是出现一个真实撞到过的假失败：
+  //
+  //   签名 → `release.ts --push`（它会先跑一次 build，把同一份索引原样重写）
+  //        → 索引的 mtime 比签名新 → `--check` 报"索引改过但没有重新签名"
+  //
+  // 内容一模一样、签名完全有效，工具却坚持说没签 —— 而作者照着提示去重签，
+  // 下次 push 又会重写一遍 mtime。这是一个自己制造的死循环。
+  //
+  // 只写"变了的内容"就把它断掉了：确定性构建下重复运行产出同一份文本，
+  // mtime 因此停在上一次真正的改动上。
+  const serialized = stringifyIndex(index);
   const versionCount = index.plugins.reduce((sum, p) => sum + p.versions.length, 0);
-  console.log(
-    `\n索引已写入 index.json：${index.plugins.length} 个插件、${versionCount} 个版本，哈希全部复核通过。`
-  );
+  if (readFileSync(INDEX_FILE, 'utf8') === serialized) {
+    console.log('\n索引内容未变，未重写 index.json（保持它的修改时间，那是签名校验的依据）');
+  } else {
+    writeFileSync(INDEX_FILE, serialized);
+    console.log(
+      `\n索引已写入 index.json：${index.plugins.length} 个插件、${versionCount} 个版本，哈希全部复核通过。`
+    );
+  }
 
   if (signatureProblem() !== null) {
     // 不当作失败：签名需要私钥，而本脚本刻意不接触私钥。但必须说得足够响 ——
@@ -877,7 +920,7 @@ function runCheck(fresh: readonly FreshPlugin[], previous: Index | null): number
 
   problems.push(...verifyIndexArtifacts(previous));
 
-  const expected = buildIndex(previous, fresh);
+  const expected = buildIndex(fresh);
   if (stringifyIndex(expected) !== readFileSync(INDEX_FILE, 'utf8')) {
     problems.push('index.json 与仓库内容不一致，需要重新生成');
   }
