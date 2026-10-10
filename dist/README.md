@@ -1,10 +1,26 @@
 # dist/
 
-构建产物 `.lcp` 的落点，文件名为 `<插件 ID>-<版本号>.lcp`：
+构建产物 `.lcp` 的落点。**这里有两种形状，而且会长期并存**：
 
 ```
-com.rinntheor.modulith.hello-1.0.0.lcp
+kanban/1.0.5.lcp                                ← 新版本：dist/<插件目录名>/<版本号>.lcp
+com.rinntheor.modulith.hello-1.0.0.lcp          ← 历史版本：dist/<插件 ID>-<版本号>.lcp（平铺）
 ```
+
+**新版本**由 `node scripts/build.ts` 按 `<插件目录名>/<版本号>.lcp` 落在这里。用目录名做
+目录段是因为它是仓库内的稳定身份（tag 也是 `<目录名>-v<版本号>`），用版本号做文件名则让
+同一个插件下的多版本互不覆盖，`git status` 里一眼看得出新增了哪一版。
+
+**历史版本保持原来的平铺路径，而且必须保持。** 索引里每个版本的 `package.path` 是客户端
+**直接拼接**的仓库内相对路径（宿主 `src/services/pluginMarket.ts` 的
+`registrySources(version.tag, version.package.path, …)`），而 `scripts/release.ts --check`
+会验证「tag 指向的提交里含有 `package.path` 那个包」。旧 tag 的提交树里文件就在平铺路径上 ——
+**改一个字节，已经装上或正要安装那些版本的用户就拿到 404**。已经发布过的版本，路径从此
+不可变；新布局只能对**将来发布**的版本生效。`build.ts` 因此只对索引里还没有的版本号用新规则，
+已经在索引里的版本一律沿用索引记录的那条路径。
+
+`node scripts/build.ts --check` 对两种形状一视同仁：它以索引里的 `package.path` 为唯一准绳，
+逐个文件核对存在性与哈希，不解析目录结构。
 
 **由脚本生成，不要手工放东西进来**：
 
@@ -13,7 +29,7 @@ node scripts/build.ts
 ```
 
 脚本会复核这里的每个包：索引引用的文件必须存在，且哈希与记录一致。手工塞进来的包不在索引
-里，会被忽略。
+里，会被忽略（也不会被打包进任何索引条目）。
 
 ## 这个目录进版本库
 

@@ -7,13 +7,34 @@
 // 索引的格式定义在**应用仓库**：
 //   docs/02-开发指南/插件开发/清单文件参考.md
 // 本脚本是该格式的生产方。格式只有那一份定义 —— 在这里再抄一份说明必然漂移。
+//
+// ============================================================
+// dist/ 有**两种形状**，而且两种会长期并存
+// ============================================================
+//
+//   * 历史版本（2026-10 之前发布）：平铺，`dist/<插件 ID>-<版本号>.lcp`；
+//   * 新版本（本次改动之后发布）：分目录，`dist/<插件目录名>/<版本号>.lcp`。
+//
+// **历史的那一种不能改。** 索引里每个版本的 `package.path` 是客户端直接拼接的仓库内
+// 相对路径（宿主 `src/services/pluginMarket.ts` 的 `registrySources(version.tag,
+// version.package.path, ...)`），而 `release.ts --check` 会验证「tag 指向的提交里含有
+// `package.path` 那个包」。旧 tag 的提交树里文件就在平铺路径上 —— 改一个字节，已发布
+// 版本就会 404。
+//
+// 因此本文件里**只有"新生成一个路径"的那一处**用到新规则（`distPathFor`）。
+// 所有"从磁盘已有产物建立索引条目"的历史保留逻辑一律读索引里原有的 `package.path`：
+//
+//   * `packOne` —— 某个版本号已在索引里时，沿用索引记录的路径（新版本才用新规则）；
+//   * `verifyRecordedArtifacts` / `verifyIndexArtifacts` —— 只按 `package.path` 找文件。
+//
+// 于是 `--check` 天然同时接受两种形状，`dist/` 里两种布局并存也不会互相干扰。
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PACKAGE_IGNORE, readManifest, validatePlugin, type PluginManifest } from './manifest.ts';
+import { PACKAGE_IGNORE, namingAdvisories, readManifest, validatePlugin, type PluginManifest } from './manifest.ts';
 import { createZip } from './zip.ts';
 import { bundleAll, orphanedOutputs } from './bundle.ts';
 
@@ -402,7 +423,37 @@ function contributionKinds(manifest: PluginManifest): string[] {
   });
 }
 
-function packOne(dirName: string): FreshPlugin {
+/**
+ * **新版本的**产物路径：`dist/<插件目录名>/<版本号>.lcp`。
+ *
+ * 这是新布局唯一的"生产点"。它**只用于生成还没在索引里出现过的版本** ——
+ * 已经在索引里的版本号必须沿用索引记录的 `package.path`（见 `packOne`），
+ * 否则已发布版本会指向一个那个 tag 的提交树里不存在的路径。
+ *
+ * 用目录名而不是插件 ID 做目录段：目录名是仓库内的稳定身份（tag 也用它，
+ * `<目录名>-v<版本号>`），而 ID 的末段与目录名已经解耦（见 docs/目录规范.md 第 3 节）。
+ * 版本号做文件名：同一个插件下多个版本因此互不覆盖，`git status` 里也一眼看得出
+ * 新增了哪一版。
+ *
+ * 导出是为了能在进程内直接验证它的输出（沙箱里跑不起 esbuild，把规则导出比
+ * 事后从磁盘形状反推可靠）。
+ */
+export function distPathFor(dirName: string, version: string): string {
+  return `dist/${dirName}/${version}.lcp`;
+}
+
+/**
+ * 打包一个插件。
+ *
+ * `previous` 用来决定**产物路径**：某个版本号已经在索引里，就沿用索引记录的那一条
+ * （`recorded.package.path`），不按新规则重算 —— 这就是"新布局只对将来的版本生效"
+ * 的落点。已发布版本的路径与不可变 tag 的提交树必须逐字对应，重算会让老用户 404。
+ *
+ * 导出是为了能在**进程内**验证这条规则：受限环境里 esbuild 起不了子进程
+ * （`spawn EPERM`），整条 `build.ts --check` 跑不起来，而"已发布的路径不被重算"
+ * 恰恰是这次改动最不能错的一条。`compareVersions` 是同样的用途。
+ */
+export function packOne(dirName: string, previous: Index | null): FreshPlugin {
   const dir = join(PLUGINS_DIR, dirName);
   const manifest = readManifest(dir);
   const buffer = packagePlugin(dir);
@@ -421,6 +472,14 @@ function packOne(dirName: string): FreshPlugin {
   const kinds = contributionKinds(manifest);
   const background = (manifest.activationEvents ?? []).includes('onStartup');
 
+  // 路径的两种来源，顺序即优先级：
+  //   1. 索引已经记过这个版本 → 用**记录的**那一条（历史平铺，或上一次发布时定的新路径）；
+  //   2. 否则 → 新布局 `dist/<目录名>/<版本号>.lcp`。
+  // 认版本号而不是文件是否存在：文件在不在是"产物有没有丢"，不是"路径该叫什么"。
+  const recorded = previous?.plugins
+    .find((plugin) => plugin.id === manifest.name)
+    ?.versions.find((item) => item.version === manifest.version);
+
   return {
     dirName,
     manifest,
@@ -437,7 +496,7 @@ function packOne(dirName: string): FreshPlugin {
       // 会让它多走一道打开包读清单的核实。正常情况下不该走到那里。
       runtime: manifest.runtime === 'sandboxed' ? 'sandboxed' : 'in-process',
       package: {
-        path: `dist/${manifest.name}-${manifest.version}.lcp`,
+        path: recorded?.package.path ?? distPathFor(dirName, manifest.version),
         size: buffer.length,
         sha256: sha256(buffer),
       },
@@ -511,7 +570,13 @@ function buildIndex(previous: Index | null, fresh: readonly FreshPlugin[]): Inde
   return { schemaVersion: SCHEMA_VERSION, plugins };
 }
 
-/** 索引里引用的每个包都必须存在，且哈希与记录一致 */
+/**
+ * 索引里引用的每个包都必须存在，且哈希与记录一致。
+ *
+ * **唯一准绳是索引里的 `package.path`**，因此平铺（`dist/<ID>-<版本>.lcp`）与
+ * 新分目录（`dist/<目录名>/<版本>.lcp`）两种形状都通过 —— `--check` 不需要知道
+ * 布局，它只回答"索引说的那个文件在不在、字节对不对"。
+ */
 function verifyIndexArtifacts(index: Index): string[] {
   const problems: string[] = [];
   for (const plugin of index.plugins) {
@@ -666,6 +731,12 @@ async function main(): Promise<number> {
   }
 
   // ---- 1. 校验全部清单。先收集完再报，避免「改一个跑一次」 ----
+  //
+  // 索引在这里就**读出来备用**（而不是等到落盘前）：`packOne` 要靠它判断某个版本号
+  // 是否已经发布过 —— 已发布的版本必须沿用索引里记录的 `package.path`，
+  // 新布局只能作用于将来的版本。读索引本来就没有副作用，提前读不改变任何不变量。
+  const previous = readIndex();
+
   const problems: string[] = [];
   for (const dirName of dirNames) {
     const dir = join(PLUGINS_DIR, dirName);
@@ -684,18 +755,24 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  // ---- 2. 打包（只进内存，check 模式不落盘） ----
-  const fresh = dirNames.map(packOne);
+  // 命名建议：**不是错误**，不阻断构建。理由见 docs/目录规范.md 第 3 节 ——
+  // 硬要求是"目录名在本仓库内唯一"（tag 用的就是它），与 ID 的末段无关。
+  for (const dirName of dirNames) {
+    for (const advice of namingAdvisories(join(PLUGINS_DIR, dirName), dirName)) {
+      console.log(`  ! plugins/${dirName}: ${advice}`);
+    }
+  }
 
-  if (checkOnly) return runCheck(fresh);
+  // ---- 2. 打包（只进内存，check 模式不落盘） ----
+  const fresh = dirNames.map((dirName) => packOne(dirName, previous));
+
+  if (checkOnly) return runCheck(fresh, previous);
 
   // ---- 3. 落盘之前的全部校验 ----
   //
   // 顺序是刻意的：**能在落盘前发现的失败，一律在落盘前拒绝**。此前是 dist/ 先落盘、
   // 复核在其后，于是「索引与产物不一致」时留下的是「dist 已换、index 未换」的半更新
   // 状态，与本文件开头和 docs/发布流程.md 承诺的「任何一步失败都不会写出产物」相矛盾。
-  const previous = readIndex();
-
   const rewrites = findVersionRewrites(previous, fresh);
   if (rewrites.length > 0) {
     console.error('已发布版本的内容被改写，未生成任何产物：\n');
@@ -711,9 +788,15 @@ async function main(): Promise<number> {
   }
 
   // ---- 4. 落盘 ----
+  //
+  // 每个包各自 `mkdir` 它的父目录：新布局下是 `dist/<目录名>/`，而那是**第一次发这个
+  // 插件的新版本时**才出现的目录。只建 `dist/` 那一层会让新布局在第一次使用时
+  // 以一个 ENOENT 收场。
   mkdirSync(DIST_DIR, { recursive: true });
   for (const item of fresh) {
-    writeFileSync(join(ROOT, item.version.package.path), item.buffer);
+    const target = join(ROOT, item.version.package.path);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, item.buffer);
     console.log(
       `  ✔ ${item.version.package.path}  ${item.buffer.length} 字节  ${item.version.package.sha256.slice(0, 12)}…`
     );
@@ -757,10 +840,18 @@ async function main(): Promise<number> {
   return 0;
 }
 
-/** 只校验：源码与索引是否一致、索引与 dist 里的包是否一致 */
-function runCheck(fresh: readonly FreshPlugin[]): number {
+/**
+ * 只校验：源码与索引是否一致、索引与 dist 里的包是否一致。
+ *
+ * **它不认识任何布局。** 索引引用的每个包都按 `package.path` 逐字去找
+ * （`verifyIndexArtifacts`），因此 `dist/` 里平铺的与新分目录的两种形状同时合法 ——
+ * 这不是"特意兼容"，而是"唯一准绳本来就是索引里的那一条路径"。
+ *
+ * `previous` 由调用方传入（它在打包之前就得读出来给 `packOne` 定路径）；
+ * 传 `null` 表示索引文件不存在。
+ */
+function runCheck(fresh: readonly FreshPlugin[], previous: Index | null): number {
   const problems: string[] = [];
-  const previous = readIndex();
 
   if (!previous) {
     console.error('index.json 不存在。运行 node scripts/build.ts 生成。');
@@ -824,4 +915,12 @@ function runCheck(fresh: readonly FreshPlugin[]): number {
   return 0;
 }
 
-process.exit(await main());
+// 直接运行：`node scripts/build.ts` / `node scripts/build.ts --check`
+//
+// 与 `bundle.ts` / `typecheck.ts` 同一形状的入口判断。**它不只是风格问题。**
+// 本文件导出的 `distPathFor` 是"新布局落在哪"这条规则的唯一生产者，而受限环境里
+// esbuild 起不了子进程（`spawn EPERM`），整条构建跑不起来 —— 那种环境下要验证这条
+// 规则只能靠 `import`。没有这层判断，`import` 会顺带执行整个构建并 `process.exit()`。
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(await main());
+}

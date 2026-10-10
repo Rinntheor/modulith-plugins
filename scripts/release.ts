@@ -305,6 +305,13 @@ function collectFacts(index: Index): VersionFact[] {
   const tags = new Set(git('tag', '-l').split('\n').filter(Boolean));
   const history = git('log', '--format=%H', '-400').split('\n').filter(Boolean);
 
+  // **包里那个 `package.path` 是这里唯一的路径来源，本脚本不认识 dist/ 的布局。**
+  //
+  // 这是刻意的，而且现在更重要了：dist/ 里平铺（`dist/<插件 ID>-<版本>.lcp`，历史版本）
+  // 与分目录（`dist/<目录名>/<版本>.lcp`，新版本）两种形状会长期并存。用通配或按文件名
+  // 反解"这是哪个插件的哪一版"会把"已发布版本的路径"变成脚本的猜测结果 —— 而
+  // `index.json` 记的那一条才是客户端真正会去请求的地址（宿主 `pluginMarket.ts` 的
+  // `registrySources`）。校验必须对同一个地址发言，否则它证明的是另一件事。
   const facts: VersionFact[] = [];
 
   for (const plugin of index.plugins) {
