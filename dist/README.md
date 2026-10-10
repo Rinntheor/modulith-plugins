@@ -37,7 +37,11 @@ node scripts/build.ts
 
 1. **CDN 只能代理仓库内容**，不能代理 GitHub Release 附件。产物不入库就没有稳定的分发
    地址。
-2. 入库之后，任何人 `git checkout` 某个 tag 都能逐字节核对线上包与仓库源码是否一致。
+2. **「这个版本到底发了什么」可以逐字节复查。** 最新版能 `git checkout <它的 tag>` 直接
+   核对；更早的版本**没有 tag**（索引与 tag 都只保留最新版，见
+   [../docs/发布流程.md](../docs/发布流程.md) 第 10 节），但那条记录在 **`index.json` 的
+   git 历史**里 —— `git log -p index.json` 查得到当时的 `tag`/`path`/`sha256`，
+   `git checkout <那个提交>` 就能拿到当时的索引与那个包。入库之后这条链才是完整的；
    不入库的话，「这个版本到底发了什么」就无从复查。
 
 ## 包是确定性的
