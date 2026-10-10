@@ -527,8 +527,27 @@
       ],
       "icon": "plugins/hello/icon.svg",
       "source": "plugins/hello",
-      "latest": "1.0.3",
+      "latest": "1.0.4",
       "versions": [
+        {
+          "version": "1.0.4",
+          "tag": "hello-v1.0.4",
+          "engines": {
+            "modulith": ">=1.6.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "runtime": "sandboxed",
+          "package": {
+            "path": "dist/hello/1.0.4.lcp",
+            "size": 8428,
+            "sha256": "1d5e72346b05bc4c45659599ca0c60d9c0521942c22ecef2d77aa5a3179b50cb"
+          }
+        },
         {
           "version": "1.0.3",
           "tag": "hello-v1.0.3",
