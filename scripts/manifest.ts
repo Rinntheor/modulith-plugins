@@ -95,7 +95,14 @@ function isSafeRelative(rel: string): boolean {
 /**
  * 校验一份清单与它所在目录。返回问题列表，空数组表示通过。
  *
- * `dirName` 用于校验「目录名与插件 ID 最后一段一致」这条本仓库自己的约定。
+ * `dirName` 目前**不再**参与任何硬校验 —— 曾经它被用来强制「目录名与插件 ID 最后一段
+ * 一致」，那条规则已降级为建议（`namingAdvisories`）。原因见 docs/目录规范.md 第 3 节：
+ * 仓库内真正必须唯一的是**目录名**（tag 就是 `<目录名>-v<版本号>`），而 ID 末段与它
+ * 解耦之后，两个作者可以各自拥有 `com.a.modulith.notes` / `com.b.modulith.notes`，
+ * 目录分别叫 `a-notes` / `b-notes`。把它当错误拦下，会让"ID 用反向域名化解冲突"
+ * 这条设计在目录名这一层重新变成冲突。
+ *
+ * 参数保留：调用方按目录遍历，递进来是自然的，且将来若要再加目录级的校验不必改签名。
  */
 export function validatePlugin(dir: string, dirName: string): string[] {
   const problems: string[] = [];
@@ -106,11 +113,6 @@ export function validatePlugin(dir: string, dirName: string): string[] {
     problems.push('缺少 name');
   } else if (!NAME_RE.test(manifest.name)) {
     problems.push(`name 非法（1-64 字符，首字符为字母或数字，其余可为字母数字与 . _ -）：${manifest.name}`);
-  } else {
-    const tail = manifest.name.split('.').pop();
-    if (tail !== dirName) {
-      problems.push(`目录名与插件 ID 最后一段不一致：目录 ${dirName}，ID 末段 ${tail}`);
-    }
   }
 
   if (!manifest.version) {
@@ -207,4 +209,39 @@ export function validatePlugin(dir: string, dirName: string): string[] {
   }
 
   return problems;
+}
+
+/**
+ * 命名**建议**：目录名与插件 ID 最后一段是否一致。
+ *
+ * 与 `validatePlugin` 的关键区别是：这里返回的东西**不阻断构建**，只打印。
+ *
+ * ============================================================
+ * 为什么这条从硬规则降为建议
+ * ============================================================
+ *
+ * 它原本是一条硬校验，而它把两件并不相干的事绑在了一起：
+ *
+ *   * **仓库内目录名唯一** —— 这是真的硬要求，而且只有它一个：tag 是
+ *     `<目录名>-v<版本号>`（见 `build.ts` 的 `packOne`），目录名重复会让两个插件的
+ *     tag 撞名，而 tag 一旦推出去不可移动；
+ *   * **目录名 == ID 末段** —— 这只是"便于人对照"，没有任何链路依赖它。
+ *
+ * 绑在一起的代价体现在冲突上：两个人都想做笔记插件时，`com.a.modulith.notes` 与
+ * `com.b.modulith.notes` 本来靠反向域名 ID 就化解了冲突（displayName 都可以叫「笔记」），
+ * 但目录名这一层逼第二个人改名 —— 于是 ID 变成 `com.b.modulith.notes-b`，
+ * 作者信息在名字里重复。真正要唯一的东西从来只有一个：目录名。
+ *
+ * 因此现在只有建议：`plugins/b-notes/` 装 `com.b.modulith.notes` 是合法的，
+ * 只是人对照时不如 `plugins/notes/` 直观。见 docs/目录规范.md 第 3 节。
+ */
+export function namingAdvisories(dir: string, dirName: string): string[] {
+  const manifest = readManifest(dir);
+  if (!manifest.name) return []; // 缺 name 由 validatePlugin 报错，这里不重复
+  const tail = manifest.name.split('.').pop();
+  if (!tail || tail === dirName) return [];
+  return [
+    `目录名与插件 ID 末段不一致（目录 ${dirName}，ID 末段 ${tail}）——` +
+      `可以这样，但人对照起来不如一致时直观；ID 一旦发布不可更改`,
+  ];
 }

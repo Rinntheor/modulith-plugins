@@ -110,6 +110,8 @@ const PUSH = args.has('--push');
 const VERIFY_ONLY = args.has('--verify');
 /** 只补 tag 并推送：不打包、不提交、不动分支 */
 const TAGS_ONLY = args.has('--tags-only');
+/** 删掉本地那些不对应任何索引版本的 tag（远端要人自己删，见 `pruneObsoleteTags`） */
+const PRUNE_TAGS = args.has('--prune-tags');
 
 /**
  * 推送分支用的 refspec，**写死而不依赖 `push.default`**。
@@ -301,15 +303,60 @@ interface VersionFact {
   tagTarget: string | null;
 }
 
+/**
+ * 一个插件在索引里**要打 tag 的那个版本**。
+ *
+ * ============================================================
+ * 为什么只有一条：只给最新版打 tag（2026 的政策变更）
+ * ============================================================
+ *
+ * 索引现在每个插件只保留最新版（`build.ts::buildIndex`），因此这个函数几乎总是
+ * 原样返回那一条。写成函数而不是在调用处直接取 `plugin.versions[0]`，是要把这条
+ * 政策**写在代码里**：客户端只安装 `latest`（`latestVersionOf()` 是市场唯一入口），
+ * 给历史版本建 tag 等于为**永远不会被拉取的内容**推送 git ref、让 CDN 建永久缓存 ——
+ * 32 个版本就是 32 条 ref，插件数量上去之后是线性膨胀，而收益是零。
+ *
+ * 万一索引里又出现了多条（有人把历史放回索引），这里只取最新那条并**明确告警**，
+ * 而不是跟着一起膨胀回去 —— 静默地多打 21 条 tag，正是这次要根治的形态。
+ */
+function latestVersionsOf(plugin: IndexPlugin): IndexVersion[] {
+  if (plugin.versions.length <= 1) return plugin.versions;
+
+  const sorted = [...plugin.versions].sort((a, b) => compareVersionDesc(a.version, b.version));
+  console.warn(
+    `  ${YELLOW}!${RESET} ${plugin.id} 在索引里有 ${plugin.versions.length} 个版本，` +
+      `本次只为最新版 ${sorted[0].version} 建 tag（索引应当只保留最新版，见 build.ts）`
+  );
+  return [sorted[0]];
+}
+
+/** 版本号从大到小。只用于"挑出最大的那一条"。 */
+function compareVersionDesc(a: string, b: string): number {
+  const pa = a.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const pb = b.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    const diff = (pb[i] ?? 0) - (pa[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
 function collectFacts(index: Index): VersionFact[] {
   const tags = new Set(git('tag', '-l').split('\n').filter(Boolean));
   const history = git('log', '--format=%H', '-400').split('\n').filter(Boolean);
 
+  // **包里那个 `package.path` 是这里唯一的路径来源，本脚本不认识 dist/ 的布局。**
+  //
+  // 这是刻意的，而且现在更重要了：dist/ 里平铺（`dist/<插件 ID>-<版本>.lcp`，历史版本）
+  // 与分目录（`dist/<目录名>/<版本>.lcp`，新版本）两种形状会长期并存。用通配或按文件名
+  // 反解"这是哪个插件的哪一版"会把"已发布版本的路径"变成脚本的猜测结果 —— 而
+  // `index.json` 记的那一条才是客户端真正会去请求的地址（宿主 `pluginMarket.ts` 的
+  // `registrySources`）。校验必须对同一个地址发言，否则它证明的是另一件事。
   const facts: VersionFact[] = [];
 
   for (const plugin of index.plugins) {
     const dir = plugin.source.replace(/^plugins\//, '');
-    for (const version of plugin.versions) {
+    for (const version of latestVersionsOf(plugin)) {
       const localTagExists = tags.has(version.tag);
 
       let tagTarget: string | null = null;
@@ -528,17 +575,100 @@ interface PushStep {
   error?: string;
 }
 
+/**
+ * 删掉**不属于当前索引**的本地 tag。
+ *
+ * ============================================================
+ * 为什么需要它（政策变更的配套）
+ * ============================================================
+ *
+ * 索引现在每个插件只保留最新版（`build.ts::buildIndex`），因此"合法的 tag 集合"
+ * 就是索引里那 N 条版本各自的 tag —— 11 个插件就是 11 条。
+ *
+ * 此前是**每个版本一条**：32 个版本 32 条 tag。原因不是谁做错了，而是当时的索引
+ * 保留了历史版本。索引一收敛，旧的 tag 就成了"指向永远不会被拉取的内容的 ref"：
+ * 每次 `--tags-only` / `--push` 都要处理它们，插件多了之后是海量的 ref。
+ *
+ * ============================================================
+ * 为什么只删本地、远端交给人
+ * ============================================================
+ *
+ * 删远端 tag 是**改写公共历史**的动作，而且不可逆。它与"签名不由脚本代做"是同一条
+ * 理由：影响所有人的不可逆操作不该藏在一条自动流水线里 —— 脚本把命令原样打出来，
+ * 人看清楚再执行。
+ *
+ * 顺序也是刻意的：**先本地、后远端**。中途失败时两边的差异是"远端多几条"，
+ * 那是看得见的（`git ls-remote --tags` 一比就知道）；反过来则表现为客户端 404，
+ * 而 404 的排查方向会先跑到网络上去。
+ */
+function pruneObsoleteTags(): number {
+  const index = readIndex();
+
+  const wanted = new Set<string>();
+  for (const plugin of index.plugins) {
+    for (const version of plugin.versions) wanted.add(version.tag);
+  }
+
+  const all = git('tag', '-l')
+    .split('\n')
+    .filter(Boolean);
+  const obsolete = all.filter((tag) => !wanted.has(tag));
+
+  if (obsolete.length === 0) {
+    console.log(
+      `${GREEN}没有过时的 tag${RESET}${DIM} —— 本地 ${all.length} 条，全部对应索引里的版本。${RESET}\n`
+    );
+    return 0;
+  }
+
+  console.log(`索引里有 ${wanted.size} 条版本，因此保留同样多的 tag。`);
+  console.log(`本地另有 ${obsolete.length} 条 tag 不对应任何索引版本，将被删除：\n`);
+  for (const tag of obsolete) console.log(`  ${DIM}-${RESET} ${tag}`);
+
+  const failed: string[] = [];
+  for (const tag of obsolete) {
+    try {
+      git('tag', '-d', tag);
+    } catch (error) {
+      failed.push(tag);
+      console.warn(
+        `  ${YELLOW}!${RESET} 删除 ${tag} 失败：${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  console.log(
+    `\n本地已删除 ${obsolete.length - failed.length} 条，保留 ${wanted.size} 条。`
+  );
+
+  console.log(
+    `\n${BOLD}远端还有同样的 ${obsolete.length} 条，需要你自己执行（这一步不可逆）：${RESET}\n`
+  );
+  console.log(`  git push origin --delete ${obsolete.join(' ')}\n`);
+  console.log(
+    `${DIM}脚本不代删远端：它改写公共历史，且失败方式（客户端 404）离原因很远。${RESET}\n`
+  );
+
+  return failed.length > 0 ? 1 : 0;
+}
+
 async function main(): Promise<number> {
-  const mode = PUSH
-    ? '（会推送）'
-    : TAGS_ONLY
-      ? '（只补 tag 并推送）'
-      : CHECK_ONLY
-        ? '（只校验）'
-        : VERIFY_ONLY
-          ? '（只验线上）'
-          : '（不改远端）';
+  const mode = PRUNE_TAGS
+    ? '（只清过时的本地 tag）'
+    : PUSH
+      ? '（会推送）'
+      : TAGS_ONLY
+        ? '（只补 tag 并推送）'
+        : CHECK_ONLY
+          ? '（只校验）'
+          : VERIFY_ONLY
+            ? '（只验线上）'
+            : '（不改远端）';
   console.log(`\n${BOLD}插件发布${RESET}  ${DIM}${mode}${RESET}\n`);
+
+  // 清理过时 tag 是一条**独立**动作：它不打包、不校验、不推送，因此放在最前面
+  // 直接返回，不进入下面那条发布流水线。
+  if (PRUNE_TAGS) return pruneObsoleteTags();
 
   if (!CHECK_ONLY && !VERIFY_ONLY && !TAGS_ONLY) {
     // ---- 1. 打包 + 生成索引 ----

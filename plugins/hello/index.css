@@ -3,16 +3,21 @@
  * 类名统一带 `hello__` 前缀。
  *
  * ============================================================
- * 这个插件跑在**自己的 webview** 里，因此这里的样式是自足的
+ * 这个插件跑在**自己的文档**里，而宿主会把主题令牌送进来
  * ============================================================
  *
- * 旧写法复用宿主的 `--accent-*` 变量、并靠宿主在 `:root` 上切换的 `.dark` 类做深色。
- * 沙箱里两者都不存在 —— 插件是一个**独立文档**，宿主那个页面上的 CSS 自定义属性与
- * 类名都到不了这里。
+ * 这里曾经写着「旧写法复用宿主的 `--accent-*`、并靠宿主在 `:root` 上切换的
+ * `.dark` 做深色。**沙箱里两者都不存在**」，因此深色用 `prefers-color-scheme`
+ * 自己判断。**那个结论在 1.6.0 之后不再成立** —— 宿主会把全套设计令牌注入插件
+ * 文档，并在**插件文档自己的** `:root` 上挂 `.dark`。
  *
- * 因此深色用 `prefers-color-scheme` 判断（它由浏览器给出，与宿主无关），
- * 颜色自己带。代价是插件不再自动跟随宿主的强调色；换来的是它不再依赖宿主的内部
- * 实现 —— 宿主改一套配色变量不会让插件看起来坏掉。
+ * 所以现在的写法与其余插件一致：
+ *   * 强调色用 `var(--accent-*)`，**带兜底值** —— 令牌缺失时仍然是可读的颜色；
+ *   * 深色用 `:root.dark`，**不用** `prefers-color-scheme`。
+ *
+ * 为什么后者是错的：`prefers-color-scheme` 读的是**操作系统**的主题，而用户在
+ * 应用里切的是**宿主**的主题。两者可以不一致（系统深色 + 应用浅色是最常见的组合），
+ * 于是插件不跟着用户的开关走 —— 那看起来像插件坏了，而不是像一处配色选择。
  *
  * **不使用 Tailwind 工具类**：那些类名是构建宿主时扫描宿主源码生成的，
  * 插件在运行时才加载，写的 `bg-white` 不在那次扫描范围内，不会生成对应规则。
@@ -51,7 +56,8 @@
   font-size: 14px;
   font-weight: 500;
   color: #fff;
-  background: #4f46e5;
+  /* 跟随宿主的强调色；兜底值保证令牌缺失时按钮仍然可见 */
+  background: var(--accent-500, #4f46e5);
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -59,7 +65,7 @@
 }
 
 .hello__button:hover:not(:disabled) {
-  background: #6366f1;
+  background: var(--accent-600, #4338ca);
 }
 
 .hello__button:active:not(:disabled) {
@@ -71,16 +77,15 @@
   cursor: default;
 }
 
-@media (prefers-color-scheme: dark) {
-  .hello__title {
-    color: #f3f4f6;
-  }
+/* 深色：由宿主在插件文档的 `:root` 上加 `.dark` 触发。 */
+:root.dark .hello__title {
+  color: #f3f4f6;
+}
 
-  .hello__count {
-    color: #d1d5db;
-  }
+:root.dark .hello__count {
+  color: #d1d5db;
+}
 
-  .hello__muted {
-    color: #9ca3af;
-  }
+:root.dark .hello__muted {
+  color: #9ca3af;
 }
