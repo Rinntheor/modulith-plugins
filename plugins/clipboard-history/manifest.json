@@ -1,5 +1,5 @@
 {
-  "name": "com.modulith.sample.clipboard-history",
+  "name": "com.rinntheor.modulith.clipboard-history",
   "displayName": "剪贴板历史",
   "version": "1.0.0",
   "description": "留住你复制过的东西：文本按时间倒序列出来，可搜索、可置顶、可删除，点一下就能贴回剪贴板。图片采集默认关闭。",
@@ -14,18 +14,17 @@
     "url": "https://github.com/Rinntheor/modulith-plugins.git"
   },
   "categories": [
-    "示例",
-    "效率"
+    "效率",
+    "隐私"
   ],
   "keywords": [
-    "sample",
     "clipboard",
     "history",
     "paste",
-    "demo"
+    "剪贴板"
   ],
   "engines": {
-    "modulith": ">=1.7.0"
+    "modulith": ">=1.6.4"
   },
   "runtime": "sandboxed",
   "main": "index.js",

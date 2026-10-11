@@ -657,11 +657,32 @@
 
   function newEntryObject(change) {
     var text = textOf(change.text || '');
+    var formats = formatTagsOf(change.formats);
+    var at = typeof change.at === 'number' && change.at > 0 ? change.at : Date.now();
+
+    /**
+     * 条目的身份。
+     *
+     * **有文本时按内容取哈希** —— 下面的折叠与去重逻辑依赖"同一段文本哈希相等"。
+     *
+     * **没有文本时绝不能也这么做。** `hashText('')` 是一个**常量**，于是每一张截图都
+     * 会撞上同一个 `text_hash`：第二张起被 `add()` 当成"这段之前记过"折叠进第一行，
+     * 而 `captureImage` 只在结果是 `inserted` 时才跑 —— 图片因此**永远写不下去**。
+     * 症状很有迷惑性：文字一切正常，只有截图记不下来，而且不报任何错。
+     *
+     * 无文本的观察改用「格式 + 本次观察时刻」做身份。时刻来自宿主（一轮 800 ms 只可能
+     * 观察到一次变化），因此同一毫秒里出现两张截图这件事在真实路径上不会发生。
+     * 前缀 `\u0000` 是为了与任何真实文本的哈希分开。
+     */
+    var hash = text ? hashText(text) : hashText('\u0000' + formats.join('|') + '@' + at);
+
     return {
       text: text,
-      hash: hashText(text),
-      formats: formatTagsOf(change.formats),
-      at: typeof change.at === 'number' && change.at > 0 ? change.at : Date.now(),
+      hash: hash,
+      formats: formats,
+      at: at,
+      // 由调用方按需填：这条记录为什么要落到列表里（例如"有图但宿主交付不了"）
+      note: null,
     };
   }
 
@@ -738,8 +759,10 @@
     var insertion = dbExec(
       'INSERT INTO clipboard_entries ' +
         '(post_time, last_seen_at, cached_text, text_bytes, text_hash, formats, pinned, image_bytes, note) ' +
-        'VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0, NULL)',
-      [entry.at, entry.at, preview, bytes, entry.hash, JSON.stringify(entry.formats)]
+        // `note` 是参数而不是写死的 NULL：少数条目一落库就该带上一句解释
+        // （"有图但宿主交付不了"），否则它在列表里是一条没有内容也没有原因的空条目。
+        'VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, 0, ?7)',
+      [entry.at, entry.at, preview, bytes, entry.hash, JSON.stringify(entry.formats), entry.note || null]
     );
 
     return insertion.then(function (meta) {
@@ -817,7 +840,16 @@
     // 否则它会变成一条空条目（列表里显示"（这条只有图片）"却根本没有图）。
     if (!entry.text) {
       if (!core.settings.captureImages) return Promise.resolve('skipped');
-      if (entry.formats.indexOf('image/png') === -1) return Promise.resolve('skipped');
+      if (entry.formats.indexOf('image/png') === -1) {
+        // 剪贴板上确实有图，但宿主给不出字节：`CF_BITMAP` 是**设备相关位图**，要经 GDI
+        // 取像素才能编码，而宿主明确不提供这条路径（见 `clipboard.rs` 的格式表）。
+        //
+        // **不静默跳过**：那样用户只会看到"截图又没记下来"，而一个字的原因都没有 ——
+        // 这正是这一类缺陷能活到被人手工发现的原因。这里照样落一条，把原因写进
+        // `note` 让界面看得见；纯文本观察（没有任何图片格式）仍然按原来的方式跳过。
+        if (entry.formats.indexOf('image/bmp') === -1) return Promise.resolve('skipped');
+        entry.note = '剪贴板只提供了设备相关位图（CF_BITMAP），宿主无法把它编码成图片，因此这一条没有图';
+      }
     }
 
     // 极短时间内的同一次观察：内存窗口挡住，不进数据库。
