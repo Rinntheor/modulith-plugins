@@ -356,11 +356,62 @@
    *
    * `normalized` 为真表示这次补了 scheme，调用方**必须把它回显出来**。
    */
+  /**
+   * URL 里**永远不该出现、但复制粘贴经常带上**的不可见字符。
+   *
+   *   * `\u00a0` 不换行空格 —— 从网页与聊天软件里复制时最常见的一大类；
+   *   * `\u2000`–`\u200a` 各种宽度的空格、`\u202f` 窄不换行空格、`\u3000` 全角空格；
+   *   * `\u200b`–`\u200f`、`\u2060`、`\ufeff` 零宽字符与方向标记。
+   *
+   * 它们在 URL 里没有任何合法用途（真要有空格必须写成 `%20`），因此直接**删掉**，
+   * 而不是报一个用户无法照做的错。删掉这件事必须**看得见** —— 与补 `https://`
+   * 是同一条规矩。
+   */
+  var INVISIBLE_IN_URL = /[\u00a0\u1680\u2000-\u200f\u2028\u2029\u202f\u205f\u2060\u3000\ufeff]/g;
+
+  /** 真正会破坏网址的字符：ASCII 空格、C0/C1 控制字符、DEL。 */
+  var URL_BREAKING = /[\u0000-\u0020\u007f-\u009f]/;
+
   function validateUrl(value) {
     var text = trimmed(value);
     if (!text) {
       return { ok: false, code: 'empty', message: '请填写网址，例如 example.com 或 https://example.com' };
     }
+    // 先去掉**看不见**的字符，再做空白判定。
+    //
+    // **顺序不能反。** 这些字符在输入框里看不出来，而 `\s` 会匹配其中一部分 ——
+    // 反过来的结果是用户收到一句「网址里不能有空格」，可他在那个网址里怎么找都
+    // 找不到空格，只能来报 bug（这正是收到的那条报告）。
+    var stripped = 0;
+    var withoutInvisible = text.replace(INVISIBLE_IN_URL, function () {
+      stripped += 1;
+      return '';
+    });
+    if (stripped > 0) {
+      text = withoutInvisible;
+      if (!text) {
+        return {
+          ok: false,
+          code: 'invisible-only',
+          message: '输入里只有看不见的字符（零宽字符或特殊空格），没有真正的网址。',
+        };
+      }
+    }
+
+    // 剩下**真的会破坏网址**的只有 ASCII 空格与控制字符。错误里必须给出位置 ——
+    // 「不能有空格」这句话对着一个看不出空格的输入是没法照做的。
+    var breaking = URL_BREAKING.exec(text);
+    if (breaking) {
+      var where = breaking.index + 1;
+      var codePoint = ('0000' + breaking[0].charCodeAt(0).toString(16).toUpperCase()).slice(-4);
+      var what = breaking[0] === ' ' ? '一个空格' : '一个控制字符（U+' + codePoint + '）';
+      return {
+        ok: false,
+        code: 'space',
+        message: '网址的第 ' + where + ' 个字符是' + what + '。网址里的空格要写成 %20。',
+      };
+    }
+
     if (text.length > MAX_URL_LENGTH) {
       return {
         ok: false,
@@ -368,13 +419,12 @@
         message: '网址太长了（' + text.length + ' 字符，上限 ' + MAX_URL_LENGTH + '）。',
       };
     }
-    if (/\s/.test(text)) {
-      return { ok: false, code: 'space', message: '网址里不能有空格。' };
-    }
 
     var schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(text);
     var url = text;
-    var normalized = false;
+    // `normalized` 表示"我们改过用户输入"，去掉不可见字符也算改过。
+    var normalized = stripped > 0;
+    var schemeAdded = false;
 
     if (!schemeMatch) {
       // 只写了域名（或者域名加路径）时补 https。补完的结果必须回显。
@@ -387,17 +437,30 @@
       }
       url = 'https://' + text;
       normalized = true;
+      schemeAdded = true;
       schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.\-]*):/.exec(url);
     }
 
     var scheme = schemeMatch[1].toLowerCase();
+
+    /** 「我替你改了什么」的那句话。改了什么必须看得见。 */
+    function noteFor(schemeAdded) {
+      var parts = [];
+      if (stripped > 0) {
+        parts.push('输入里有 ' + stripped + ' 个看不见的字符（零宽字符或特殊空格），已经去掉');
+      }
+      if (schemeAdded) {
+        parts.push('只输入域名时默认按 https 处理，已补成 ' + url);
+      }
+      return parts.length ? parts.join('；') + '。' : '';
+    }
 
     if (scheme === 'mailto') {
       var address = url.slice(url.indexOf(':') + 1).replace(/^\/*/, '');
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) {
         return { ok: false, code: 'mailto', message: 'mailto: 后面要跟一个邮箱地址，例如 mailto:someone@example.com' };
       }
-      return { ok: true, url: url, normalized: normalized, message: '' };
+      return { ok: true, url: url, normalized: normalized, note: noteFor(schemeAdded), message: '' };
     }
 
     if (scheme !== 'http' && scheme !== 'https') {
@@ -417,7 +480,7 @@
       return { ok: false, code: 'host', message: '网址里没有主机名，例如 https://example.com' };
     }
 
-    return { ok: true, url: url, normalized: normalized, message: '' };
+    return { ok: true, url: url, normalized: normalized, note: noteFor(schemeAdded), message: '' };
   }
 
   // ============================================================
@@ -1206,6 +1269,7 @@
             argsText: '',
             // 补出来的 scheme 要让用户看得见：回显进输入框，然后才提交。
             autoFixed: checked.normalized,
+            autoFixNote: checked.note,
           })
         );
         return;
@@ -1274,7 +1338,10 @@
           ? h(
               'div',
               { className: 'ql-note' },
-              '已自动补全为 ' + draft.target + '（只输入域名时默认按 https 处理）。'
+              // **文案来自校验函数**，不是写死的一句。它可能补了 scheme，
+              // 也可能只是去掉了看不见的字符 —— 写死"已补全为 https"会在后一种
+              // 情况下说假话（输入本来就是 `https://…`）。
+              draft.autoFixNote || '已自动补全为 ' + draft.target + '。'
             )
           : null,
 
@@ -1308,7 +1375,7 @@
             'aria-label': isUrlMode() ? '网址' : '程序或文件路径',
             onChange: function (e) {
               // 用户手改了地址就撤销"自动补全"的提示
-              patch({ target: e.target.value, error: '', autoFixed: false });
+              patch({ target: e.target.value, error: '', autoFixed: false, autoFixNote: '' });
             },
             onBlur: function () {
               var value = trimmed(draft.target);
@@ -1325,6 +1392,7 @@
                       kind: 'url',
                       target: guessed.url,
                       autoFixed: guessed.normalized,
+                      autoFixNote: guessed.note,
                       kindNote: '这看起来是一个网址，已经按网址处理。',
                     });
                     return;
@@ -1337,7 +1405,7 @@
               if (draft.autoFixed) return;
               var checked = validateUrl(value);
               if (checked.ok && checked.normalized) {
-                patch({ target: checked.url, autoFixed: true });
+                patch({ target: checked.url, autoFixed: true, autoFixNote: checked.note });
               }
             },
           })
@@ -2573,6 +2641,11 @@
           confirmLabel: countFor(menu.group.id) > 0 ? '确认删除？条目会移到「未分组」' : '确认删除？',
           onConfirm: function () {
             removeGroup(menu.group);
+            // **`node` 型菜单项必须自己关菜单。** 普通项走的是 `ContextMenu` 里
+            // 「先 `props.onClose()` 再执行」那条路（见那里的 `onClick`），而
+            // `node` 走的是插槽分支，**没有任何人替它关** —— 不写这一行的表现是
+            // "分组删掉了，菜单还悬在那里"，而它还挂着一个已经不存在分组的引用。
+            setMenu(null);
           },
         });
         entries.push({ node: groupDelete });
@@ -2617,6 +2690,10 @@
             label: '删除',
             onConfirm: function () {
               remove(menu.item);
+              // 与分组那一条同一个理由：`node` 型菜单项没有人替它关菜单。
+              // 不关的后果不只是难看 —— 菜单上其余动作（打开、编辑、移入分组）
+              // 都还绑在这个**已经被删掉**的条目上。
+              setMenu(null);
             },
           }),
         });
