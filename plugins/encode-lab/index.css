@@ -478,6 +478,38 @@
   color: var(--encodelab-text-soft);
 }
 
+/* 「输出写法」那几个按钮上写的是实际的十六进制串（0x6d656f77），
+   用等宽字体才看得出来 0x 与后面的数字、以及数字之间的空格，比例字体下会糊成一片 */
+.encodelab__option--mono {
+  font-family: var(--encodelab-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+}
+
+/* --- 十六进制：解释方式 ------------------------------------------------ */
+
+/* 「解释方式」那排按钮右边那句提醒。与 options 同一行，窄屏时自己换行 */
+.encodelab__options-note {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--encodelab-text-soft);
+}
+
+/* 十六进制工具里"同一段输入的另一半"那张卡片（若按文本字节 / 若按数值）。
+   它和主结果是并列的两种解释，不是次要结果，所以不压暗文字，只在左边加一道竖线 ——
+   一眼能看出"这张跟上一张是一对"，又不会被误当成主答案。 */
+.encodelab__card--alt {
+  border-left: 3px solid var(--encodelab-line);
+  padding-left: 10px;
+}
+
+.encodelab__card--alt .encodelab__card-title {
+  font-weight: 500;
+  color: var(--encodelab-text-mid);
+}
+
 /* --- 空态与错误 ---------------------------------------------------------- */
 
 .encodelab__empty {
@@ -690,6 +722,16 @@
 :root.dark .encodelab__button:hover:not(:disabled) {
   background: #222736;
   border-color: #3b4252;
+}
+
+:root.dark .encodelab__options-note {
+  color: var(--encodelab-text-soft);
+}
+
+/* 竖线在深色下要自己给颜色：浅色那条 #e5e7eb 在深底上几乎看不见，
+   而这道线正是"这两张是一对"的唯一视觉提示 */
+:root.dark .encodelab__card--alt {
+  border-left-color: #3b4252;
 }
 
 :root.dark .encodelab__panel::-webkit-scrollbar-thumb,
