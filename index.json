@@ -239,6 +239,54 @@
       ]
     },
     {
+      "id": "com.rinntheor.modulith.clipboard-history",
+      "displayName": "剪贴板历史",
+      "summary": "留住你复制过的东西：文本按时间倒序列出来，可搜索、可置顶、可删除，点一下就能贴回剪贴板。图片采集默认关闭。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "效率",
+        "隐私"
+      ],
+      "keywords": [
+        "clipboard",
+        "history",
+        "paste",
+        "剪贴板"
+      ],
+      "icon": "plugins/clipboard-history/icon.svg",
+      "source": "plugins/clipboard-history",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "clipboard-history-v1.0.0",
+          "engines": {
+            "modulith": ">=1.7.0"
+          },
+          "permissions": [
+            "storage",
+            "plugin-data",
+            "clipboard",
+            "clipboard-monitor"
+          ],
+          "kinds": [
+            "modules",
+            "settings"
+          ],
+          "runtime": "sandboxed",
+          "package": {
+            "path": "dist/clipboard-history/1.0.0.lcp",
+            "size": 45204,
+            "sha256": "84b063e46d0455ae666880942f0c8ebc2c2c482bbacc94a94c3b4300a3598148"
+          }
+        }
+      ]
+    },
+    {
       "id": "com.rinntheor.modulith.color-lab",
       "displayName": "颜色与对比度",
       "summary": "看清一种颜色的各种写法（含 OKLCH），由它推出一整套色阶，并按 WCAG 标准算出它与背景的对比度是否达标。",
@@ -465,6 +513,65 @@
             "path": "dist/com.rinntheor.modulith.regex-lab-1.0.3.lcp",
             "size": 34427,
             "sha256": "010247be84b5a1d0c1dd6576fd6ffe35c593116bb6a07dbd98020300bfac91b9"
+          }
+        }
+      ]
+    },
+    {
+      "id": "com.rinntheor.modulith.translate",
+      "displayName": "划词翻译",
+      "summary": "在别的程序里选中一段文字，按一下热键就出译文。译文由你自己跑在本机的 OpenAI 兼容模型服务（llama.cpp 的 server 一类）生成，选中的文字与译文都不离开这台机器。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "效率",
+        "开发"
+      ],
+      "keywords": [
+        "translate",
+        "translation",
+        "llm",
+        "llama.cpp",
+        "openai",
+        "local",
+        "hotkey",
+        "selection",
+        "翻译",
+        "划词"
+      ],
+      "icon": "plugins/translate/icon.svg",
+      "source": "plugins/translate",
+      "latest": "2.0.0",
+      "versions": [
+        {
+          "version": "2.0.0",
+          "tag": "translate-v2.0.0",
+          "engines": {
+            "modulith": ">=1.7.0"
+          },
+          "permissions": [
+            "storage",
+            "plugin-data",
+            "network",
+            "notification",
+            "clipboard",
+            "secrets",
+            "global-hotkey",
+            "read-selection"
+          ],
+          "kinds": [
+            "modules",
+            "settings"
+          ],
+          "background": true,
+          "runtime": "sandboxed",
+          "package": {
+            "path": "dist/translate/2.0.0.lcp",
+            "size": 77845,
+            "sha256": "77a810df79e4ec7a36901cc9f4fb3bcc46df9737c01d05ea986d0ec8cf0efb4a"
           }
         }
       ]
