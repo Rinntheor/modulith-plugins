@@ -567,6 +567,51 @@
   }
 
   // ============================================================
+  // 恢复默认设置（不可撤销，因此要一次明确的同意）
+  // ============================================================
+  //
+  // 为什么不用 `window.confirm`：这个宿主里 `tauri-plugin-dialog` 注入的脚本把
+  // `confirm` 换成了**走 IPC 的 `async` 版本**，于是 `!window.confirm(...)` 取反的是
+  // 一个 Promise —— **永远是 `false`**。"用户点了取消"根本拦不住，
+  // 用户的自定义提示音照样被清掉。这是**数据丢失级**的缺陷。
+  //
+  // 改用宿主渲染的 `ctx.ui.dialog`（需 `notification` 权限，本插件已声明，
+  // 因此这次修改**不涉及任何权限变更**）。
+  //
+  // 判定规则只有一条：**只有 `confirmed === true` 才执行。**
+  // `dismissed` 与"点了取消"不是一回事：`dismissed: true` 是用户**没回答**
+  // （点了别处 / 按了 Esc），`confirmed: false` 且 `dismissed: false` 才是明确取消。
+  // 两种都不执行 —— 拿不准就当没同意，而"清空自定义提示音"是不可撤销的。
+  function resetSettings(onError) {
+    var ui = ctx.ui;
+    // 特性探测而不是 try/catch：旧宿主上没有这个方法，那时**不执行**是对的
+    // （恢复默认只是少做一件事；误清用户的提示音却是不可撤销的）
+    if (!ui || typeof ui.dialog !== 'function') {
+      onError('当前宿主不支持确认对话框，没有恢复默认设置');
+      return;
+    }
+
+    ui.dialog({
+      tone: 'warning',
+      title: '恢复默认设置',
+      message: '恢复全部设置为默认值？当前的自定义提示音会被清除。',
+      confirmLabel: '恢复默认',
+      cancelLabel: '取消',
+    })
+      .then(function (result) {
+        if (!result || result.confirmed !== true) return;
+        core.settings = defaultSettings();
+        persistSettings();
+        emit();
+      })
+      .catch(function (e) {
+        // 浮层窗口起不来时 Promise 会拒绝，因此这里必须有一个 catch ——
+        // 与"用户点了取消"同样是**不执行**
+        onError('确认对话框没有打开：' + e);
+      });
+  }
+
+  // ============================================================
   // 界面
   // ============================================================
 
@@ -1032,10 +1077,7 @@
             className: 'pm-btn pm-btn-ghost',
             type: 'button',
             onClick: function () {
-              if (!window.confirm('恢复全部设置为默认值？当前的自定义提示音会被清除。')) return;
-              core.settings = defaultSettings();
-              persistSettings();
-              emit();
+              resetSettings(setError);
             },
           },
           '恢复默认'
