@@ -1,0 +1,720 @@
+/* plugins/translate/index.css
+ *
+ * 单列布局：标题 + 状态行在最上面，中间是手动翻译与结果，下面是模型、设置、
+ * 密钥、历史。整页一起滚动。
+ *
+ * 根元素用 `position: absolute; inset: 0` 铺满**模块可见区域**（宿主每个标签的
+ * 滚动容器就是最近的定位祖先），内部再用一个 `overflow-y: auto` 的容器滚动 ——
+ * 因此不必写死 `calc(100vh - 76px)` 这类算式（那种算式把标题栏与二级标题栏的高度
+ * 抄了一份，宿主一改就错位）。与 `plugins/clipboard-history/index.css` 同一条。
+ *
+ * 配色沿用宿主的 `--accent-*` 变量并带兜底值；深色模式由宿主在插件文档自己的
+ * `:root` 上挂 `.dark` 来切换（1.6.0 起宿主会注入全套设计令牌，**不要**用
+ * `prefers-color-scheme` —— 它读的是操作系统的主题，而用户在应用里切的是宿主的）。
+ *
+ * 类名统一用 `tr-` 前缀，避免与宿主或其它插件的样式撞车。**不使用 Tailwind
+ * 工具类**：那些类名是在构建宿主时扫描宿主源码生成的，插件运行时注入的类名
+ * 不会生成对应规则（见 docs/目录规范.md 第 5.2 节）。
+ */
+
+.tr-root {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+  box-sizing: border-box;
+}
+
+/* 限宽并居中。限宽必须落在一个显式容器上，而不是 `.tr-root > *` —— 那个选择器
+ * 与子元素自己的 margin 特异度相同，简写的 margin 会把 auto 左右边距覆盖成 0。 */
+.tr-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.tr-loading {
+  padding: 24px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ============================================================
+   标题
+   ============================================================ */
+
+.tr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tr-head-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tr-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.tr-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #4b5563;
+}
+
+.tr-sub kbd {
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #f9fafb;
+  color: #111827;
+}
+
+/* 这一屏上最重要的一句：后台的译文不会出现在这里。用一条左边框把它从普通
+ * 说明里挑出来 —— 它是这条界面的一个**限制**，不是装饰性的小字。 */
+.tr-hint {
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #4b5563;
+  background: #f8fafc;
+  border-left: 3px solid var(--accent-300, #a5b4fc);
+  border-radius: 0 6px 6px 0;
+}
+
+/* ============================================================
+   状态行
+   ============================================================ */
+
+.tr-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tr-status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.tr-status-label {
+  flex: 0 0 auto;
+  width: 44px;
+  color: #9ca3af;
+}
+
+.tr-status-value {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.tr-status-ok {
+  color: #15803d;
+}
+
+.tr-status-warn {
+  color: #b45309;
+}
+
+.tr-status-error {
+  color: #b91c1c;
+}
+
+.tr-status-off {
+  color: #6b7280;
+}
+
+.tr-status-detail {
+  min-width: 0;
+  color: #6b7280;
+  word-break: break-word;
+}
+
+/* ============================================================
+   提示条
+   ============================================================ */
+
+.tr-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.tr-banner-info {
+  color: #1e40af;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.tr-banner-success {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.tr-banner-warn,
+.tr-banner-warning {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.tr-banner-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* 服务端的错误体按**原样**显示：它常常带着一整个 JSON，用等宽 + 保留换行
+ * 才读得出来。它永远是纯文本（React 文本子节点），不会被当成标记。 */
+.tr-pre {
+  margin: 4px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================
+   卡片
+   ============================================================ */
+
+.tr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.tr-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-card-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.tr-card-head .tr-row {
+  margin-left: auto;
+}
+
+.tr-card-result {
+  border-color: var(--accent-300, #a5b4fc);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+}
+
+.tr-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #6b7280;
+}
+
+.tr-note code {
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.tr-empty {
+  margin: 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.tr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-row-between {
+  justify-content: space-between;
+}
+
+.tr-count,
+.tr-time {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   按钮
+   ============================================================ */
+
+.tr-btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  line-height: 1.5;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.tr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tr-btn-primary {
+  color: #ffffff;
+  background: var(--accent-500, #4f46e5);
+}
+
+.tr-btn-primary:not(:disabled):hover {
+  background: var(--accent-600, #4338ca);
+}
+
+.tr-btn-ghost {
+  color: #374151;
+  background: transparent;
+  border-color: #d1d5db;
+}
+
+.tr-btn-ghost:not(:disabled):hover {
+  background: #f9fafb;
+}
+
+.tr-btn-mini {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+
+/* ============================================================
+   输入
+   ============================================================ */
+
+.tr-textarea,
+.tr-input,
+.tr-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  outline: none;
+}
+
+.tr-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.tr-textarea-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.tr-textarea:focus,
+.tr-input:focus,
+.tr-select:focus {
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.tr-input-flex {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.tr-select {
+  width: auto;
+  min-width: 180px;
+}
+
+.tr-chip {
+  padding: 2px 9px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border: 1px solid var(--accent-200, #c7d2fe);
+  border-radius: 999px;
+}
+
+.tr-chip-hint {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   字段
+   ============================================================ */
+
+.tr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.tr-field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.tr-field-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   结果与历史正文
+   ============================================================ */
+
+/* `white-space: pre-wrap` 让译文里的换行保留下来；`user-select: text` 让用户
+ * 能直接选中复制（卡片那条路依赖剪贴板权限，这一条不依赖）。 */
+.tr-result-text {
+  font-size: 13px;
+  line-height: 1.85;
+  color: #111827;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.tr-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tr-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 7px;
+}
+
+.tr-history-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tr-history-head .tr-time {
+  flex: 1 1 auto;
+}
+
+.tr-history-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #374151;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* ============================================================
+   模型列表与标签
+   ============================================================ */
+
+.tr-cache {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tr-cache-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tr-model {
+  padding: 4px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.tr-model:hover {
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-model-on {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-color: var(--accent-400, #818cf8);
+  font-weight: 600;
+}
+
+.tr-tag {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.7;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.tr-tag-ok {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.tr-tag-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.tr-tag-muted {
+  color: #6b7280;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+.tr-key-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 「已保存」那一闪。固定在右下角，不占布局高度 —— 否则保存一次会让整页跳一下。 */
+.tr-flash {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #ffffff;
+  background: rgba(31, 41, 55, 0.92);
+  border-radius: 7px;
+}
+
+.tr-footnote {
+  margin: 0;
+  padding-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   深色模式
+   ============================================================
+   宿主在插件文档自己的 `:root` 上挂 `.dark`，因此这里不需要（也不该）读
+   `prefers-color-scheme`。下面把每一处写死的浅色都翻一遍。 */
+
+:root.dark .tr-title,
+:root.dark .tr-field-label,
+:root.dark .tr-card-title,
+:root.dark .tr-result-text,
+:root.dark .tr-status-value {
+  color: #e5e7eb;
+}
+
+:root.dark .tr-loading,
+:root.dark .tr-note,
+:root.dark .tr-count,
+:root.dark .tr-time,
+:root.dark .tr-empty,
+:root.dark .tr-footnote,
+:root.dark .tr-field-hint,
+:root.dark .tr-chip-hint,
+:root.dark .tr-status-detail,
+:root.dark .tr-status-label {
+  color: #6b7280;
+}
+
+:root.dark .tr-sub,
+:root.dark .tr-hint,
+:root.dark .tr-history-text {
+  color: #9ca3af;
+}
+
+:root.dark .tr-sub kbd {
+  color: #e5e7eb;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-hint {
+  background: #151823;
+  border-left-color: var(--accent-800, #3730a3);
+}
+
+:root.dark .tr-status,
+:root.dark .tr-card {
+  background: #151823;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-card-result {
+  border-color: var(--accent-800, #3730a3);
+  box-shadow: none;
+}
+
+:root.dark .tr-textarea,
+:root.dark .tr-input,
+:root.dark .tr-select {
+  color: #e5e7eb;
+  background: #10131c;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-note code {
+  color: #d1d5db;
+  background: #1a1f2b;
+}
+
+:root.dark .tr-chip {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--accent-800, #3730a3);
+}
+
+:root.dark .tr-btn-ghost {
+  color: #d1d5db;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-btn-ghost:not(:disabled):hover {
+  background: #1a1f2b;
+}
+
+:root.dark .tr-history-item {
+  background: #10131c;
+  border-color: #232838;
+}
+
+:root.dark .tr-model {
+  color: #d1d5db;
+  background: #10131c;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-model-on {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-tag-ok {
+  color: #86efac;
+  background: rgba(21, 128, 61, 0.16);
+  border-color: #14532d;
+}
+
+:root.dark .tr-tag-error {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.16);
+  border-color: #7f1d1d;
+}
+
+:root.dark .tr-tag-muted {
+  color: #9ca3af;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-banner-info {
+  color: #bfdbfe;
+  background: rgba(30, 64, 175, 0.18);
+  border-color: #1e3a8a;
+}
+
+:root.dark .tr-banner-success {
+  color: #86efac;
+  background: rgba(21, 128, 61, 0.16);
+  border-color: #14532d;
+}
+
+:root.dark .tr-banner-warn,
+:root.dark .tr-banner-warning {
+  color: #fcd34d;
+  background: rgba(180, 83, 9, 0.16);
+  border-color: #78350f;
+}
+
+:root.dark .tr-banner-error {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.16);
+  border-color: #7f1d1d;
+}
+
+:root.dark .tr-status-ok {
+  color: #86efac;
+}
+
+:root.dark .tr-status-warn {
+  color: #fcd34d;
+}
+
+:root.dark .tr-status-error {
+  color: #fca5a5;
+}

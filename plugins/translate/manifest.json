@@ -1,0 +1,128 @@
+{
+  "name": "com.rinntheor.modulith.translate",
+  "displayName": "划词翻译",
+  "version": "1.0.0",
+  "description": "在别的程序里选中一段文字，按一下热键就出译文。译文由你自己跑在本机的 OpenAI 兼容模型服务（llama.cpp 的 server 一类）生成，选中的文字与译文都不离开这台机器。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/translate",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "效率",
+    "开发"
+  ],
+  "keywords": [
+    "translate",
+    "translation",
+    "llm",
+    "llama.cpp",
+    "openai",
+    "local",
+    "hotkey",
+    "selection",
+    "翻译",
+    "划词"
+  ],
+  "engines": {
+    "modulith": ">=1.6.4"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage",
+    "network",
+    "notification",
+    "clipboard",
+    "secrets",
+    "global-hotkey",
+    "read-selection"
+  ],
+  "contributes": {
+    "modules": [
+      {
+        "id": "translate",
+        "name": "划词翻译",
+        "description": "选中文本按一下热键就出译文；也可以在这里手动翻译",
+        "icon": "Languages",
+        "priority": 76
+      }
+    ],
+    "settings": [
+      {
+        "id": "baseUrl",
+        "label": "模型服务地址",
+        "description": "OpenAI 兼容接口的 base URL，带不带结尾的斜杠都行。llama.cpp 的 server 默认是 http://127.0.0.1:5566/v1。插件只在它后面接 /chat/completions、/completions 与 /models。填本机回环地址之外的地址需要再声明 network-external 权限（见 README）。",
+        "type": "string",
+        "default": "http://127.0.0.1:5566/v1"
+      },
+      {
+        "id": "endpointKind",
+        "label": "接口形态",
+        "description": "chat 走 /chat/completions（把提示词当成一条 user 消息），completion 走 /completions（把提示词当成一段纯文本，模型接着往下写）。有些 llama.cpp 构建在 chat 那一侧不稳，那时换 completion 试试。两者都必须是 OpenAI 兼容层，不是 llama.cpp 那个单数的 /completion 原生命令。",
+        "type": "select",
+        "default": "chat",
+        "options": [
+          { "value": "chat", "label": "chat（/chat/completions）" },
+          { "value": "completion", "label": "completion（/completions）" }
+        ]
+      },
+      {
+        "id": "model",
+        "label": "模型",
+        "description": "请求体里的 model 字段，必须与服务端实际加载的那一个对得上。不要手打 —— 到插件面板里点「同步模型」，让它从 GET /models 读回来再挑。",
+        "type": "string",
+        "default": "Hy MT2 1.8B Q4_K_M.gguf"
+      },
+      {
+        "id": "promptTemplate",
+        "label": "提示词模板",
+        "description": "可用占位符：{text}（选中的原文，必需）、{target}（目标语言）、{source}（源语言，本插件不做语言检测，自动时替换成一句话说明）。本地小模型的译文质量对提示词格式极其敏感，因此这一项是可以改的 —— 一个写死的模板等于「只在作者那一个模型上能用」。面板里有同样的编辑框，改多行的建议在面板里改。",
+        "type": "string",
+        "default": "把下面这段文本翻译成{target}。只输出译文本身，不要解释、不要加引号、不要重复原文。\n\n{text}"
+      },
+      {
+        "id": "triggerCombo",
+        "label": "触发组合键",
+        "description": "在别的程序里选中文字之后按它。语法是 mod+k / mod+shift+tab 这一类（mod 在 Windows 上是 Ctrl）。组合键在系统里是独占的：被本应用、别的插件或别的程序占着时会注册失败，错误里会点名是谁占着。改完不用重启，后台那边最多一分钟就会把绑定换成新的。",
+        "type": "string",
+        "default": "Ctrl+Q"
+      },
+      {
+        "id": "targetLang",
+        "label": "目标语言",
+        "description": "译文的目标语言，会替换提示词模板里的 {target}。",
+        "type": "select",
+        "default": "简体中文",
+        "options": [
+          { "value": "简体中文", "label": "简体中文" },
+          { "value": "繁體中文", "label": "繁體中文" },
+          { "value": "English", "label": "English" },
+          { "value": "日本語", "label": "日本語" },
+          { "value": "한국어", "label": "한국어" },
+          { "value": "Русский", "label": "Русский" },
+          { "value": "Français", "label": "Français" },
+          { "value": "Deutsch", "label": "Deutsch" },
+          { "value": "Español", "label": "Español" }
+        ]
+      }
+    ],
+    "background": {
+      "entry": "background.js",
+      "onStartup": true,
+      "interval": 60,
+      "events": []
+    }
+  },
+  "activationEvents": [
+    "onStartup",
+    "onModule:translate"
+  ]
+}
