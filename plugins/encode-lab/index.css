@@ -359,6 +359,65 @@
   border-top: 1px solid var(--encodelab-line);
 }
 
+/* --- 数值进制：示例写法 ----------------------------------------------------
+ *
+ * 只在数值进制工具下出现。做成小圆角块而不是链接：它们是"点一下就填进输入框"
+ * 的按钮，外观得像按钮，但又不该抢走「清空输入 / 立即计算」那两个主按钮的注意力。
+ */
+
+.encodelab__examples {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  background: var(--encodelab-surface-sunken);
+  border-top: 1px solid var(--encodelab-line);
+}
+
+.encodelab__examples-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--encodelab-text-soft);
+}
+
+.encodelab__examples-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.encodelab__example {
+  padding: 3px 8px;
+  font-family: var(--encodelab-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--encodelab-text-mid);
+  background: var(--encodelab-surface);
+  border: 1px solid var(--encodelab-line);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.encodelab__example:hover {
+  color: var(--encodelab-text);
+  border-color: #d1d5db;
+}
+
+.encodelab__example:focus-visible {
+  outline: 2px solid var(--accent-500, #6366f1);
+  outline-offset: 1px;
+}
+
+.encodelab__example:active {
+  transform: translateY(1px);
+}
+
 /* --- 按钮 ---------------------------------------------------------------- */
 
 .encodelab__button {
@@ -688,6 +747,18 @@
 }
 
 :root.dark .encodelab__button:hover:not(:disabled) {
+  background: #222736;
+  border-color: #3b4252;
+}
+
+:root.dark .encodelab__example {
+  color: var(--encodelab-text-mid);
+  background: #1a1e2b;
+  border-color: #2c3242;
+}
+
+:root.dark .encodelab__example:hover {
+  color: var(--encodelab-text);
   background: #222736;
   border-color: #3b4252;
 }

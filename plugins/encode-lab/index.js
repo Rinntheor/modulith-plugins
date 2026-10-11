@@ -1,6 +1,6 @@
 // plugins/encode-lab/index.js
 //
-// 编码与哈希工具箱 —— Base64 / URL / 十六进制 / HTML 实体 / Unicode 转义的互转，
+// 编码与哈希工具箱 —— Base64 / URL / 十六进制 / 数值进制 / HTML 实体 / Unicode 转义的互转，
 // SHA 系列与 HMAC 计算，JWT 解码，时间戳互转。
 //
 // 手写 IIFE，不使用构建工具，因此不能写 JSX，全部用 `React.createElement`（简写为 h）。
@@ -13,9 +13,14 @@
 // 四个决定写在最前面：
 //
 // 1. **输入框里的东西原样就是"待处理的内容"，不做自动类型猜测。**
-//    除时间戳工具外，输入永远是纯文本。曾经考虑过「自动识别像 Base64 的输入并直接解码」，
-//    放弃了：那会让「我想把一段 Base64 当普通文本再编码一次」这种操作无法完成，
-//    而用户看不出为什么。猜测是替用户做决定，这里不做。
+//    除了时间戳与数值进制这两个「输入本身就是数字」的工具，输入永远是纯文本。
+//    曾经考虑过「自动识别像 Base64 的输入并直接解码」，放弃了：那会让
+//    「我想把一段 Base64 当普通文本再编码一次」这种操作无法完成，而用户看不出为什么。
+//    猜测是替用户做决定，这里不做 —— 也正因如此，数值进制是**单独一个工具**，
+//    而不是让「十六进制（文本字节）」工具看到纯数字就改按整数解释：那样它的语义
+//    会随输入变来变去，而"1 得到 31"恰恰是它那条 blurb 反复要解释清楚的东西。
+//    为什么"自动判断"根本做不到，写在 TOOLS 里 hex 那一条的注释中（111111 既是
+//    合法的十进制数、也是合法的十六进制字面量；而 abc 没有数值含义却必须能转字节）。
 //
 // 2. **所有编码都按 UTF-8 处理，base64 走字节而不是字符。**
 //    浏览器自带的 btoa/atob 只认 Latin-1，直接把中文丢进去会抛错 ——
@@ -80,7 +85,23 @@
     // **这里没有改成"纯数字就按整数解释"**：本文件第 1 条设计原则写明了
     // "输入永远是纯文本，不做自动类型猜测"，而且"猜测是替用户做决定，这里不做"。
     // 时间戳那一条是显式开的口子。把例子摆出来，比再开一个口子更符合那条原则。
-    { id: 'hex', name: '十六进制', twoWay: true, blurb: '把文本按 UTF-8 逐字节转成十六进制，或把十六进制还原成文本。输入 1 会得到 31（字符 1 的字节是 0x31），与同屏的 Base64 是同一套规则：1 → MQ==。解码时忽略空格、换行与 0x 前缀。' },
+    //
+    // 光靠 blurb 举例还不够，名字本身也在误导：1.0.4 之后仍然有人把「十六进制」
+    // 当成数值转换来用，输入 111111 看到 313131313131 就认定是 bug。因此名字改成
+    // **「十六进制（文本字节）」**，并在 blurb 末尾直接把它与「数值进制」的分工点明。
+    //
+    // 为什么必须是两个工具，而不是让一个工具看着输入自己判断 —— 两头都堵死：
+    //   · `111111` 既是合法的十进制数、**也是合法的十六进制字面量**（= 0x111111）。
+    //     同一个输入有两个都成立的解释，工具没有任何依据可以替用户挑一个；
+    //     挑错了不会报错，只会安静地给出另一个数，那比报错更糟。
+    //   · `abc` 反过来：它没有十进制的数值含义，可它在字节世界里是三个字节，
+    //     必须能转。按数值那套规则它会直接被判成非法字符。
+    // 两个方向各自都有对方无法表达的输入，就只能分成两个名字明确的工具，
+    // 让"我要的是哪一个"由用户自己说，而不是由工具猜。
+    { id: 'hex', name: '十六进制（文本字节）', twoWay: true, blurb: '把文本按 UTF-8 逐字节转成十六进制，或把十六进制还原成文本。输入 1 会得到 31（字符 1 的字节是 0x31），与同屏的 Base64 是同一套规则：1 → MQ==。解码时忽略空格、换行与 0x 前缀。这是文本 → 字节，不是数值转换：要把 111111 当成数值换成 1b207，用「数值进制」。' },
+    // 数值进制与上面的 hex 只差一个字，但做的事完全不同，所以两边都写清楚了。
+    // 这条 blurb 与 hex 那条互相点名，用户从哪一边进来都能看到区别在哪。
+    { id: 'number-base', name: '数值进制', twoWay: true, blurb: '把数值本身按进制互转：十进制 111111 就是十六进制 0x1b207、二进制 0b11011001000000111。用任意精度整数计算，超过 2^53 的大数也不会丢位。这是数值换算，不是字节转换：要把文本 111111 转成字节，用「十六进制（文本字节）」。' },
     { id: 'html', name: 'HTML 实体', twoWay: true, blurb: '把 & < > " \' 转成实体，避免插入 HTML 时破坏结构；反方向还原实体。' },
     { id: 'unicode', name: 'Unicode 转义', twoWay: true, blurb: '文本与 \\uXXXX 转义互转。也支持 \\u{XXXXX} 形式的码点写法。' },
     { id: 'hash', name: '哈希', twoWay: false, blurb: 'SHA-1 / SHA-256 / SHA-384 / SHA-512。计算在本机完成，输入不会离开这台机器。' },
@@ -266,6 +287,246 @@
     }
     return bytes;
   }
+
+  // ============================================================
+  // 数值进制（number-base）
+  //
+  // 与上面的「十六进制（文本字节）」**不是一回事**：那个转的是"文本的 UTF-8 字节"，
+  // 输入 1 会得到 31；这里转的是"数值本身"，输入 111111 会得到 0x1b207。
+  // 两个工具都留在界面上，正是为了让这个区别看得见。
+  //
+  // 为什么不能合成一个"聪明的"工具（也写在 TOOLS 里 hex 那一条的注释中）：
+  // 111111 既可以是十进制数、也可以是十六进制字面量，工具没有依据替用户挑；
+  // 而 abc 没有数值含义，却必须能按字节转出来。两边都有对方表达不了的输入。
+  //
+  // 一律用 BigInt：Number 只能精确表示到 2^53-1，再往上会悄悄进位
+  // （9007199254740993 会变成 9007199254740992）。而"我拿到了一个雪花 ID / 一个
+  // 链上数值，想知道它的十六进制"恰恰是这类工具最真实的用途。
+  // ============================================================
+
+  // ==== 数值进制：纯计算区域开始（离线验证脚本按这一行截取，勿删）====
+
+  /** 每种进制的写法与报错用词，集中一处：解析、格式化、报错三处不必各写一遍 */
+  var RADIX_INFO = {
+    2: { name: '二进制', prefix: '0b', allowed: '0 与 1' },
+    8: { name: '八进制', prefix: '0o', allowed: '0 到 7' },
+    10: { name: '十进制', prefix: '', allowed: '0 到 9' },
+    16: { name: '十六进制', prefix: '0x', allowed: '0-9 与 a-f（大小写都可以）' },
+  };
+
+  var DIGIT_CHARS = '0123456789abcdef';
+
+  /**
+   * 把出错的字符写得看得见。
+   *
+   * 直接用「」括起来的话，输入 1 000 时用户看到的是「」里什么都没有 ——
+   * 空格是不可见字符，说"空白"才说得清是哪一个。
+   */
+  function describeChar(ch) {
+    if (/\s/.test(ch)) return '空白字符';
+    return '「' + ch + '」';
+  }
+
+  /**
+   * 读一个数值字面量，返回它到底是多少。
+   *
+   * 「这是几进制」只在这里判断一次，结果与报错因此永远是同一套规则，
+   * 不会出现「按十六进制识别、又按十进制算」这种前后不一致。
+   *
+   * 认得的写法：111111、1_000_000、0x1b207、0X1B207、#1b207、
+   * 0b11011001000000111、0o657007、-0xff。前后空白随意，前缀大小写随意。
+   * 读不出来就抛 Error，由上层统一呈现 —— 不猜、也不返回一个错的数。
+   */
+  function parseNumberLiteral(raw) {
+    // 少见的运行环境里可能没有 BigInt。给一句能读懂的话，
+    // 而不是让 ReferenceError 冒到界面上变成一片空白（与 utf8Bytes 同一个理由）。
+    if (typeof BigInt !== 'function') {
+      throw new Error('当前环境不提供任意精度整数（BigInt），这个工具没法在不丢位的前提下换算');
+    }
+
+    var text = String(raw == null ? '' : raw).trim();
+    if (!text) {
+      throw new Error('没有输入任何内容，读不出数值');
+    }
+
+    var rest = text;
+    var negative = false;
+    var sign = rest.charAt(0);
+    if (sign === '-' || sign === '+') {
+      negative = sign === '-';
+      rest = rest.slice(1);
+      if (!rest) {
+        throw new Error('只有一个符号「' + sign + '」，后面没有数字');
+      }
+    }
+
+    // 前缀决定进制。这里只看最前面一两个字符，不猜内容的"样子"：
+    // 111111 既可以当十进制也可以当十六进制，凭长相挑一个是替用户做决定。
+    var radix = 10;
+    var prefix = '';
+    var body = rest;
+    if (rest.charAt(0) === '#') {
+      radix = 16;
+      prefix = '#';
+      body = rest.slice(1);
+    } else if (rest.charAt(0) === '0') {
+      var marker = rest.charAt(1);
+      if (marker === 'x' || marker === 'X') {
+        radix = 16;
+        prefix = rest.substr(0, 2);
+        body = rest.slice(2);
+      } else if (marker === 'b' || marker === 'B') {
+        radix = 2;
+        prefix = rest.substr(0, 2);
+        body = rest.slice(2);
+      } else if (marker === 'o' || marker === 'O') {
+        radix = 8;
+        prefix = rest.substr(0, 2);
+        body = rest.slice(2);
+      }
+    }
+
+    var info = RADIX_INFO[radix];
+
+    if (!body) {
+      if (prefix) {
+        throw new Error('只有前缀「' + prefix + '」（' + info.name + '），后面没有数字');
+      }
+      throw new Error('没有找到数字：' + info.name + '需要由 ' + info.allowed + ' 组成');
+    }
+
+    // 下划线只是给人看的千位分隔，位置单独查：它不能连着写，也不能顶在两头
+    if (body.charAt(0) === '_') {
+      throw new Error('下划线位置不对：它只能夹在两位数字中间，「' + text + '」却以下划线开头');
+    }
+    if (body.charAt(body.length - 1) === '_') {
+      throw new Error('下划线位置不对：它只能夹在两位数字中间，「' + text + '」却以下划线结尾');
+    }
+    if (body.indexOf('__') >= 0) {
+      throw new Error('下划线位置不对：「' + text + '」里有两个下划线挨在一起，分隔符写一个就够（例如 1_000_000）');
+    }
+
+    // offset 是"符号 + 前缀"的长度。报错说的是原输入里的第几个字符，
+    // 这样用户拿着自己贴进去的那串就能直接数出来是哪一个。
+    var offset = text.length - body.length;
+    var digits = '';
+    for (var i = 0; i < body.length; i += 1) {
+      var ch = body.charAt(i);
+      if (ch === '_') continue;
+      var digit = DIGIT_CHARS.indexOf(ch.toLowerCase());
+      if (digit < 0 || digit >= radix) {
+        throw new Error(
+          describeChar(ch) + '不是合法的' + info.name + '数字：' + info.name + '只允许 ' + info.allowed +
+            '。它在「' + text + '」的第 ' + (offset + i + 1) + ' 个字符处'
+        );
+      }
+      digits += ch.toLowerCase();
+    }
+
+    if (!digits) {
+      throw new Error('没有找到数字：下划线不能代替数字');
+    }
+
+    // 交给 BigInt 从字符串读，而不是自己一位一位乘加：
+    // 上万位时逐位乘加是 O(n²)，会把界面卡住；这里的转换是原生实现。
+    var value;
+    if (radix === 16) value = BigInt('0x' + digits);
+    else if (radix === 8) value = BigInt('0o' + digits);
+    else if (radix === 2) value = BigInt('0b' + digits);
+    else value = BigInt(digits);
+
+    // -0 与 0 是同一个数，别在结果里留下一个负号
+    if (value === BigInt(0)) negative = false;
+
+    return { text: text, radix: radix, prefix: prefix, digits: digits, value: value, negative: negative };
+  }
+
+  /** 规范写法：负数带 -，非十进制带前缀，十进制不带（可以直接粘走） */
+  function formatNumberValue(parsed, radix, upper) {
+    var digits = parsed.value.toString(radix);
+    if (upper) digits = digits.toUpperCase();
+    return (parsed.negative ? '-' : '') + RADIX_INFO[radix].prefix + digits;
+  }
+
+  function decimalText(parsed) {
+    return (parsed.negative ? '-' : '') + parsed.value.toString(10);
+  }
+
+  /** 结果区顶部那一句：说清这一次是按什么读进去的 */
+  function describeNumberLiteral(parsed) {
+    var info = RADIX_INFO[parsed.radix];
+    return (
+      '识别为' +
+      (parsed.prefix ? '带「' + parsed.prefix + '」前缀的' : '不带前缀的') +
+      info.name +
+      (parsed.negative ? '（负数）' : '') +
+      '，共 ' + parsed.digits.length + ' 位数字'
+    );
+  }
+
+  /**
+   * 数值进制工具。
+   *
+   * 编码方向：数值 → 二进制 / 八进制 / 十进制 / 十六进制（大、小写）各一条。
+   * 解码方向：任意一种写法 → 规范十进制，并在 note 里写清识别到的是几进制。
+   */
+  function computeNumberBase(input, direction) {
+    var parsed = parseNumberLiteral(input);
+
+    if (direction === 'decode') {
+      return {
+        results: [
+          {
+            label: '十进制',
+            value: decimalText(parsed),
+            mono: true,
+            note:
+              '识别到的是 ' + parsed.radix + ' 进制（' + RADIX_INFO[parsed.radix].name + '）' +
+              (parsed.prefix ? '，用了「' + parsed.prefix + '」前缀' : '，没有前缀'),
+          },
+        ],
+        note: describeNumberLiteral(parsed),
+      };
+    }
+
+    return {
+      results: [
+        {
+          label: '二进制',
+          value: formatNumberValue(parsed, 2, false),
+          mono: true,
+          note: parsed.value.toString(2).length + ' 位',
+        },
+        {
+          label: '八进制',
+          value: formatNumberValue(parsed, 8, false),
+          mono: true,
+          note: parsed.value.toString(8).length + ' 位八进制数字',
+        },
+        {
+          label: '十进制',
+          value: decimalText(parsed),
+          mono: true,
+          note: '不带前缀，可以直接粘进代码或计算器',
+        },
+        {
+          label: '十六进制（小写）',
+          value: formatNumberValue(parsed, 16, false),
+          mono: true,
+          note: parsed.value.toString(16).length + ' 位十六进制数字',
+        },
+        {
+          label: '十六进制（大写）',
+          value: formatNumberValue(parsed, 16, true),
+          mono: true,
+          note: '与上面是同一个值，只是字母大写',
+        },
+      ],
+      note: describeNumberLiteral(parsed),
+    };
+  }
+
+  // ==== 数值进制：纯计算区域结束 ====
 
   function shiftTimeText(date) {
     var diff = date.getTime() - Date.now();
@@ -519,6 +780,25 @@
       }
     }
 
+    if (tool === 'number-base') {
+      try {
+        return computeNumberBase(text, direction);
+      } catch (err) {
+        // 与 hex 分支同一套写法：本地接住，换成「说清哪个字符不对」的一句话，
+        // 绝不静默返回一个看起来像结果的错值。
+        return {
+          error:
+            (direction === 'decode' ? '解码失败：' : '编码失败：') +
+            (err && err.message ? err.message : String(err)),
+          hint:
+            '认得的写法：十进制 111111、十六进制 0x1b207 或 #1b207、二进制 0b11011001000000111、' +
+            '八进制 0o657007；可以带前后空白、下划线（1_000_000）与负号（-0xff）。' +
+            '只接受整数，小数与科学计数法（1.5、1e10）不支持。' +
+            '另外：这个工具换算的是数值本身 —— 想把文本按字节转成十六进制，请用「十六进制（文本字节）」工具。',
+        };
+      }
+    }
+
     if (tool === 'html') {
       if (direction === 'encode') {
         var escaped = escapeHtml(text);
@@ -666,6 +946,40 @@
 
   function formatCount(value) {
     return typeof value === 'number' ? value.toLocaleString('zh-CN') : '0';
+  }
+
+  /**
+   * 数值进制工具下面那排示例。
+   *
+   * 摆这些不是装饰：这个工具的输入格式比其他工具宽（前缀、下划线、负号），
+   * 光靠 blurb 一句话说不全，而"点一下就能看到结果"比读五行说明快得多。
+   * 最后那条 2^53+1 是刻意的 —— 用 Number 算会变成 …992，这里不会。
+   */
+  var NUMBER_BASE_EXAMPLES = [
+    { text: '111111', title: '十进制' },
+    { text: '0x1b207', title: '十六进制（0x 前缀）' },
+    { text: '#1b207', title: '十六进制（# 前缀，网页与设计稿里常见的写法）' },
+    { text: '0b11011001000000111', title: '二进制' },
+    { text: '0o657007', title: '八进制' },
+    { text: '1_000_000', title: '用下划线分隔的十进制' },
+    { text: '-0xff', title: '负数' },
+    { text: '9007199254740993', title: '2^53+1：用 Number 会变成 9007199254740992，这里不会' },
+  ];
+
+  /** 输入框的提示语。集中一处，省得在渲染里套四层三元表达式 */
+  function inputPlaceholder(tool, direction) {
+    if (tool.id === 'timestamp') {
+      return '输入一个时间戳（1790000000）或一个日期时间（2026-09-19 09:41:05）';
+    }
+    if (tool.id === 'jwt') {
+      return '粘贴一个 JWT，形如 xxxxx.yyyyy.zzzzz';
+    }
+    if (tool.id === 'number-base') {
+      return direction === 'decode'
+        ? '输入任意一种写法（0x1b207、0b11011001000000111、0o657007…），这里会还原成十进制'
+        : '输入一个整数（111111、1_000_000、-0xff…），这里会给出各进制的写法';
+    }
+    return '在这里输入或粘贴要处理的内容';
   }
 
   // ============================================================
@@ -1141,12 +1455,7 @@
           value: input,
           spellCheck: false,
           'aria-label': '输入内容',
-          placeholder:
-            tool.id === 'timestamp'
-              ? '输入一个时间戳（1790000000）或一个日期时间（2026-09-19 09:41:05）'
-              : tool.id === 'jwt'
-                ? '粘贴一个 JWT，形如 xxxxx.yyyyy.zzzzz'
-                : '在这里输入或粘贴要处理的内容',
+          placeholder: inputPlaceholder(tool, direction),
           onChange: function (event) {
             setInput(event.target.value);
             // 输入一变就收回「允许超长计算」的许可，免得每敲一个键都跑一遍全量转换
@@ -1211,7 +1520,36 @@
                 '文本很长，已停止自动计算：改完点「立即计算」。'
               )
             : null
-        )
+        ),
+        // 只有数值进制需要这排示例：它的输入格式最多（前缀、下划线、负号），
+        // 点一下就能看到结果，比读一长串说明快。
+        tool.id === 'number-base'
+          ? h(
+              'div',
+              { className: 'encodelab__examples' },
+              h('span', { className: 'encodelab__examples-label' }, '试试这些写法'),
+              h(
+                'div',
+                { className: 'encodelab__examples-list' },
+                NUMBER_BASE_EXAMPLES.map(function (example) {
+                  return h(
+                    'button',
+                    {
+                      key: example.text,
+                      type: 'button',
+                      className: 'encodelab__example',
+                      title: example.title,
+                      onClick: function () {
+                        setInput(example.text);
+                        setAllowOnce(false);
+                      },
+                    },
+                    example.text
+                  );
+                })
+              )
+            )
+          : null
       );
     }
 
@@ -1329,7 +1667,7 @@
         h(
           'p',
           { className: 'encodelab__subtitle' },
-          'Base64、URL、十六进制、HTML 实体、Unicode 转义的互转，SHA 系列与 HMAC 计算，JWT 解码，时间戳互转。全部在本机完成，内容不会发送到任何地方。'
+          'Base64、URL、十六进制（文本字节）、数值进制、HTML 实体、Unicode 转义的互转，SHA 系列与 HMAC 计算，JWT 解码，时间戳互转。全部在本机完成，内容不会发送到任何地方。'
         )
       ),
       renderNotice(),
@@ -1381,7 +1719,7 @@
     id: 'encodeLab',
     name: '编码与哈希工具箱',
     displayName: '编码与哈希工具箱',
-    description: 'Base64 / URL / 十六进制 / 哈希 / JWT / 时间戳，全部在本机完成',
+    description: 'Base64 / URL / 十六进制（文本字节）/ 数值进制 / 哈希 / JWT / 时间戳，全部在本机完成',
     icon: 'icon.svg',
     priority: 84,
     component: EncodeLab,
