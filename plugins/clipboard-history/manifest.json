@@ -1,0 +1,106 @@
+{
+  "name": "com.modulith.sample.clipboard-history",
+  "displayName": "剪贴板历史",
+  "version": "1.0.0",
+  "description": "留住你复制过的东西：文本按时间倒序列出来，可搜索、可置顶、可删除，点一下就能贴回剪贴板。图片采集默认关闭。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/clipboard-history",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "示例",
+    "效率"
+  ],
+  "keywords": [
+    "sample",
+    "clipboard",
+    "history",
+    "paste",
+    "demo"
+  ],
+  "engines": {
+    "modulith": ">=1.7.0"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage",
+    "plugin-data",
+    "clipboard",
+    "clipboard-monitor"
+  ],
+  "contributes": {
+    "modules": [
+      {
+        "id": "clipboard-history",
+        "name": "剪贴板历史",
+        "description": "留下复制过的东西，随时贴回去",
+        "icon": "ClipboardList",
+        "priority": 72
+      }
+    ],
+    "settings": [
+      {
+        "id": "captureEnabled",
+        "label": "启用采集",
+        "description": "关掉之后不再记录任何新的复制内容，已经存下来的历史仍然保留、仍然可以搜索与复制回去。要立刻停一会儿用面板上的「暂停」。",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "id": "maxEntries",
+        "label": "最多保留多少条",
+        "description": "超出之后从最旧的开始删。置顶的条目不计入这个数，也不会被自动删除。条数不限制内存占用，因为正文最长可能有 64 KB —— 真正兜底的是数据库体积上限。",
+        "type": "number",
+        "default": 1000,
+        "min": 10,
+        "max": 50000,
+        "step": 10
+      },
+      {
+        "id": "maxAgeDays",
+        "label": "最多保留多少天",
+        "description": "早于这么多天的记录会被自动删除（置顶的除外）。应用关着的时候天数照常走，因此下次启动时会先按这条清理一次。选「永久」时不按时间删除。",
+        "type": "select",
+        "default": "30",
+        "options": [
+          { "value": "1", "label": "1 天" },
+          { "value": "3", "label": "3 天" },
+          { "value": "7", "label": "7 天" },
+          { "value": "30", "label": "30 天" },
+          { "value": "90", "label": "90 天" },
+          { "value": "365", "label": "1 年" },
+          { "value": "3650", "label": "永久" }
+        ]
+      },
+      {
+        "id": "captureImages",
+        "label": "也记录图片",
+        "description": "默认关闭。开启后复制图片也会被记下来，每张最多 8 MB（宿主一次能交付的上限），并写进插件的明文数据目录 —— 图片很占地方，而历史里用到图片的场合很少。",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "id": "maxImageMb",
+        "label": "图片总量上限（MB）",
+        "description": "所有图片加起来超过这个体积时，从最旧的开始删图片（先删未置顶的，条目本身保留）。0 表示不留任何图片。设小一点比关掉图片采集更实用：偶尔留一张有用的截图，而不至于攒成几百 MB。",
+        "type": "number",
+        "default": 256,
+        "min": 0,
+        "max": 1024,
+        "step": 16
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:clipboard-history"
+  ]
+}

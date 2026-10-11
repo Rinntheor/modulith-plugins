@@ -1,0 +1,813 @@
+/* plugins/clipboard-history/index.css
+ *
+ * 单列布局：标题与采集状态在最上面，中间是搜索框 + 隐私说明 + 历史列表，
+ * 最下面是设置。整页一起滚动。
+ *
+ * 根元素用 `position: absolute; inset: 0` 铺满**模块可见区域**（宿主每个标签的
+ * 滚动容器就是最近的定位祖先），内部再用一个 `overflow-y: auto` 的容器滚动 ——
+ * 因此不必写死 `calc(100vh - 76px)` 这类算式（那种算式把标题栏与二级标题栏的高度
+ * 抄了一份，宿主一改就错位）。
+ *
+ * 配色沿用宿主的 `--accent-*` 变量并带兜底值，深色模式由宿主在插件文档自己的
+ * `:root` 上挂 `.dark` 来切换（1.6.0 起宿主会注入全套设计令牌，**不要**用
+ * `prefers-color-scheme` —— 它读的是操作系统的主题，而用户在应用里切的是宿主的）。
+ *
+ * 类名统一用 `ch-` 前缀，避免与宿主或其它插件的样式撞车。
+ */
+
+.ch-root {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+  box-sizing: border-box;
+}
+
+/*
+ * 内容限宽并居中。
+ *
+ * 限宽必须落在一个**显式容器**上，而不是写成 `.ch-root > *`：那种选择器（一个类 +
+ * 通配）与子元素自己的 `margin` 特异度相同，而后者在样式表里更靠后 —— 简写的
+ * `margin` 会把 auto 左右边距覆盖成 0，于是其中一行标题在宽窗口下贴到最左边，
+ * 其余内容却仍然居中。一个专用容器不参与这种竞争。
+ */
+.ch-inner {
+  display: flex;
+  flex-direction: column;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* ============================================================
+   标题与采集状态
+   ============================================================ */
+
+.ch-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ch-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ch-head-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ch-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+/*
+ * 采集状态徽标。**常驻**，不是只在暂停时才出现 —— 用户需要一眼看出它现在到底在
+ * 不在记。四种状态各有颜色，且都同时带文字（颜色不是唯一的表达方式）。
+ */
+.ch-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 9px 2px 7px;
+  font-size: 11px;
+  line-height: 1.7;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ch-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ch-state-live {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.ch-state-paused {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.ch-state-off {
+  color: #4b5563;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+.ch-state-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.ch-state-detail {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   按钮
+   ============================================================ */
+
+.ch-btn {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.ch-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ch-btn-primary {
+  color: #ffffff;
+  background: var(--accent-500, #4f46e5);
+}
+
+.ch-btn-primary:hover:not(:disabled) {
+  background: var(--accent-600, #4338ca);
+}
+
+.ch-btn-ghost {
+  color: #4b5563;
+  background: transparent;
+  border-color: #e5e7eb;
+}
+
+.ch-btn-ghost:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+/* 列表行里的小按钮 */
+.ch-btn-mini {
+  padding: 3px 9px;
+  font-size: 11px;
+  color: #6b7280;
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+
+.ch-btn-mini:hover:not(:disabled) {
+  color: #111827;
+  background: #f9fafb;
+}
+
+.ch-btn-active {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-color: var(--accent-300, #a5b4fc);
+}
+
+.ch-btn-danger:hover:not(:disabled) {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* ============================================================
+   搜索
+   ============================================================ */
+
+.ch-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ch-input {
+  box-sizing: border-box;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  font-family: inherit;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  outline: none;
+}
+
+.ch-input:focus {
+  border-color: var(--accent-400, #818cf8);
+}
+
+.ch-input:disabled {
+  color: #9ca3af;
+  background: #f9fafb;
+}
+
+.ch-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ch-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   隐私说明
+   ============================================================ */
+
+.ch-privacy {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.75;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #eef1f5;
+  border-radius: 10px;
+}
+
+.ch-privacy-summary {
+  padding: 8px 11px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.ch-privacy-body {
+  padding: 0 11px 10px;
+}
+
+.ch-privacy-body p {
+  margin: 0 0 6px;
+}
+
+.ch-privacy-body ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ch-privacy-body li {
+  margin-bottom: 4px;
+}
+
+.ch-privacy-body code {
+  padding: 0 3px;
+  font-size: 10px;
+  background: #eef1f5;
+  border-radius: 4px;
+}
+
+.ch-privacy-foot {
+  margin-top: 6px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   列表
+   ============================================================ */
+
+/*
+ * 滚动容器。窗口化列表需要一个**有确定高度**的滚动父元素（`clientHeight` 是
+ * 计算可见范围的依据），因此它自己撑满剩下的空间，而不是让整页滚。
+ */
+.ch-scroll {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: 62vh;
+  margin-top: 12px;
+  overflow-y: auto;
+  border-radius: 11px;
+}
+
+.ch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ch-row-wrap {
+  /* 窗口化的测量单位：`VirtualList` 量的是这个包装层里第一层的实际高度 */
+  display: block;
+}
+
+.ch-row {
+  position: relative;
+  padding: 11px 13px;
+  background: #ffffff;
+  border: 1px solid #eef1f5;
+  border-radius: 11px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ch-row:hover {
+  border-color: #e5e7eb;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.ch-row-pinned {
+  border-color: var(--accent-200, #c7d2fe);
+  background: linear-gradient(0deg, var(--accent-50, #eef2ff), var(--accent-50, #eef2ff)), #ffffff;
+}
+
+/*
+ * 条目的正文预览。
+ *
+ * `white-space: pre-wrap` + `word-break: break-word` 是刻意的：用户复制的东西里
+ * 换行与超长单词都很常见（一段 JSON、一个 URL），不让它们换行会把行撑到横向滚动，
+ * 而不保留换行会让代码片段看起来混成一团。
+ *
+ * `max-height` 挡住超长预览把一行撑到占满整屏 —— 完整正文仍然存着，"复制"按钮拿的
+ * 是全文，不受这里影响。
+ */
+.ch-row-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #111827;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ch-row-pinned .ch-row-text {
+  padding-right: 52px;
+}
+
+.ch-pin-mark {
+  position: absolute;
+  top: 11px;
+  right: 12px;
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--accent-700, #4338ca);
+  background: #ffffff;
+  border: 1px solid var(--accent-200, #c7d2fe);
+  border-radius: 999px;
+}
+
+.ch-row-media {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.ch-thumb {
+  display: block;
+  max-width: 180px;
+  max-height: 110px;
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #f9fafb;
+}
+
+.ch-thumb-loading,
+.ch-thumb-missing {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.ch-row-note {
+  align-self: center;
+  font-size: 11px;
+  color: #b45309;
+}
+
+.ch-row-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 22px;
+}
+
+.ch-row-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.ch-row-seen {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #b6bcc6;
+}
+
+.ch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ch-tag {
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ch-spacer {
+  flex: 1 1 auto;
+}
+
+/* 操作按钮平时隐形，悬停该行时才浮出来 */
+.ch-row-actions {
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ch-row:hover .ch-row-actions,
+.ch-row:focus-within .ch-row-actions {
+  opacity: 1;
+}
+
+/* 键盘与触摸场景下没有"悬停"，因此窄屏与减少动效时操作按钮常显 */
+@media (hover: none) {
+  .ch-row-actions {
+    opacity: 1;
+  }
+}
+
+.ch-more {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+
+.ch-more-note {
+  font-size: 11px;
+  color: #b6bcc6;
+}
+
+/* ============================================================
+   设置（面板内的一份，与「设置 → 插件设置」写同一份值）
+   ============================================================ */
+
+.ch-settings {
+  margin-top: 14px;
+  font-size: 12px;
+  background: #ffffff;
+  border: 1px solid #eef1f5;
+  border-radius: 11px;
+}
+
+.ch-settings-summary {
+  padding: 9px 13px;
+  cursor: pointer;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.ch-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 13px 13px;
+}
+
+.ch-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ch-toggle input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.ch-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ch-toggle-label {
+  font-size: 12px;
+  color: #374151;
+}
+
+.ch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ch-field-label {
+  font-size: 12px;
+  color: #374151;
+}
+
+.ch-input-num {
+  width: 130px;
+}
+
+.ch-select {
+  width: 160px;
+}
+
+.ch-hint {
+  font-size: 11px;
+  line-height: 1.65;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   其他
+   ============================================================ */
+
+.ch-empty {
+  margin-top: 12px;
+  padding: 28px 14px;
+  font-size: 12px;
+  line-height: 1.8;
+  text-align: center;
+  color: #9ca3af;
+  border: 1px dashed #e5e7eb;
+  border-radius: 11px;
+}
+
+.ch-empty-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.ch-footnote {
+  margin-top: 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #b6bcc6;
+  text-align: center;
+}
+
+.ch-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: 10px;
+}
+
+.ch-banner-info {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.ch-banner-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.ch-banner-text {
+  flex: 1 1 auto;
+  word-break: break-word;
+}
+
+.ch-banner-close {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.ch-banner-close:hover {
+  opacity: 1;
+}
+
+/* 「已复制 / 已置顶」轻提示：固定在右下，不占布局、不打断滚动 */
+.ch-toast {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  max-width: 320px;
+  padding: 7px 14px;
+  font-size: 12px;
+  color: #f9fafb;
+  background: rgba(17, 24, 39, 0.92);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
+  animation: ch-toast-in 0.16s ease-out;
+}
+
+@keyframes ch-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 尊重宿主的「减少动效」开关 */
+:root.lc-reduce-motion .ch-toast {
+  animation: none;
+}
+
+/* ============================================================
+   深色模式
+   ============================================================ */
+
+:root.dark .ch-title,
+:root.dark .ch-row-text {
+  color: #e5e7eb;
+}
+
+:root.dark .ch-state-detail,
+:root.dark .ch-count,
+:root.dark .ch-row-time,
+:root.dark .ch-row-seen,
+:root.dark .ch-empty,
+:root.dark .ch-footnote,
+:root.dark .ch-hint,
+:root.dark .ch-thumb-loading,
+:root.dark .ch-thumb-missing,
+:root.dark .ch-more-note {
+  color: #6b7280;
+}
+
+:root.dark .ch-row,
+:root.dark .ch-settings {
+  background: #151823;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-row:hover {
+  border-color: #3a4257;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+:root.dark .ch-row-pinned {
+  border-color: var(--accent-800, #3730a3);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+:root.dark .ch-pin-mark {
+  color: #c7d2fe;
+  background: #1a1f2b;
+  border-color: var(--accent-800, #3730a3);
+}
+
+:root.dark .ch-thumb {
+  border-color: #2c3242;
+  background: #1a1f2b;
+}
+
+:root.dark .ch-input {
+  color: #e5e7eb;
+  background: #151823;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-input::placeholder {
+  color: #4b5563;
+}
+
+:root.dark .ch-input:disabled {
+  color: #6b7280;
+  background: #1a1f2b;
+}
+
+:root.dark .ch-btn-ghost {
+  color: #cbd5e1;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root.dark .ch-btn-mini {
+  color: #9ca3af;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-btn-mini:hover:not(:disabled) {
+  color: #e5e7eb;
+  background: #232838;
+}
+
+:root.dark .ch-btn-active {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.18);
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .ch-btn-danger:hover:not(:disabled) {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.25);
+  border-color: #7f1d1d;
+}
+
+:root.dark .ch-privacy {
+  color: #9ca3af;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-privacy-summary {
+  color: #cbd5e1;
+}
+
+:root.dark .ch-privacy-body code {
+  background: #232838;
+  color: #cbd5e1;
+}
+
+:root.dark .ch-tag {
+  color: #9ca3af;
+  background: #232838;
+}
+
+:root.dark .ch-settings-summary,
+:root.dark .ch-field-label,
+:root.dark .ch-toggle-label {
+  color: #cbd5e1;
+}
+
+:root.dark .ch-state-live {
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.22);
+  border-color: #166534;
+}
+
+:root.dark .ch-state-paused {
+  color: #fcd34d;
+  background: rgba(120, 53, 15, 0.25);
+  border-color: #92400e;
+}
+
+:root.dark .ch-state-off {
+  color: #9ca3af;
+  background: #232838;
+  border-color: #2c3242;
+}
+
+:root.dark .ch-state-error {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.2);
+  border-color: #7f1d1d;
+}
+
+:root.dark .ch-empty {
+  border-color: #2c3242;
+}
+
+:root.dark .ch-empty-error,
+:root.dark .ch-banner-error {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.18);
+  border-color: #7f1d1d;
+}
+
+:root.dark .ch-banner-info {
+  color: #bfdbfe;
+  background: rgba(30, 58, 138, 0.2);
+  border-color: #1e3a8a;
+}
