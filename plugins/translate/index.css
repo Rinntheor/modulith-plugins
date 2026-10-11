@@ -1,0 +1,1076 @@
+/* plugins/translate/index.css
+ *
+ * 单列布局：标题在最上面，然后是**翻译工作台**（原文、语言、译文），接着是
+ * 历史、统计、模型与端点，最后是收起来的划词热键那一节。整页一起滚动。
+ *
+ * 主次是刻意的：工作台与历史是一个翻译工具的正文，热键是它的一条可选入口 ——
+ * 因此热键那一节默认收起，而工作台是页面上下来的第一块内容。
+ *
+ * 根元素用 `position: absolute; inset: 0` 铺满**模块可见区域**（宿主每个标签的
+ * 滚动容器就是最近的定位祖先），内部再用一个 `overflow-y: auto` 的容器滚动 ——
+ * 因此不必写死 `calc(100vh - 76px)` 这类算式（那种算式把标题栏与二级标题栏的高度
+ * 抄了一份，宿主一改就错位）。与 `plugins/clipboard-history/index.css` 同一条。
+ *
+ * 配色沿用宿主的 `--accent-*` 变量并带兜底值；深色模式由宿主在插件文档自己的
+ * `:root` 上挂 `.dark` 来切换（1.6.0 起宿主会注入全套设计令牌，**不要**用
+ * `prefers-color-scheme` —— 它读的是操作系统的主题，而用户在应用里切的是宿主的）。
+ *
+ * 类名统一用 `tr-` 前缀，避免与宿主或其它插件的样式撞车。**不使用 Tailwind
+ * 工具类**：那些类名是在构建宿主时扫描宿主源码生成的，插件运行时注入的类名
+ * 不会生成对应规则（见 docs/目录规范.md 第 5.2 节）。
+ */
+
+.tr-root {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+  box-sizing: border-box;
+}
+
+/* 限宽并居中。限宽必须落在一个显式容器上，而不是 `.tr-root > *` —— 那个选择器
+ * 与子元素自己的 margin 特异度相同，简写的 margin 会把 auto 左右边距覆盖成 0。 */
+.tr-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.tr-loading {
+  padding: 24px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ============================================================
+   标题
+   ============================================================ */
+
+.tr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tr-head-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.tr-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.tr-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #4b5563;
+}
+
+.tr-sub kbd {
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #f9fafb;
+  color: #111827;
+}
+
+/* 这一屏上最重要的一句：后台的译文不会出现在这里。用一条左边框把它从普通
+ * 说明里挑出来 —— 它是这条界面的一个**限制**，不是装饰性的小字。 */
+.tr-hint {
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #4b5563;
+  background: #f8fafc;
+  border-left: 3px solid var(--accent-300, #a5b4fc);
+  border-radius: 0 6px 6px 0;
+}
+
+/* ============================================================
+   状态行
+   ============================================================ */
+
+.tr-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.tr-status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.tr-status-label {
+  flex: 0 0 auto;
+  width: 44px;
+  color: #9ca3af;
+}
+
+.tr-status-value {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.tr-status-ok {
+  color: #15803d;
+}
+
+.tr-status-warn {
+  color: #b45309;
+}
+
+.tr-status-error {
+  color: #b91c1c;
+}
+
+.tr-status-off {
+  color: #6b7280;
+}
+
+.tr-status-detail {
+  min-width: 0;
+  color: #6b7280;
+  word-break: break-word;
+}
+
+/* ============================================================
+   提示条
+   ============================================================ */
+
+.tr-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+
+.tr-banner-info {
+  color: #1e40af;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.tr-banner-success {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.tr-banner-warn,
+.tr-banner-warning {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.tr-banner-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* 服务端的错误体按**原样**显示：它常常带着一整个 JSON，用等宽 + 保留换行
+ * 才读得出来。它永远是纯文本（React 文本子节点），不会被当成标记。 */
+.tr-pre {
+  margin: 4px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================
+   卡片
+   ============================================================ */
+
+.tr-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.tr-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-card-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.tr-card-head .tr-row {
+  margin-left: auto;
+}
+
+.tr-card-result {
+  border-color: var(--accent-300, #a5b4fc);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+}
+
+.tr-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.75;
+  color: #6b7280;
+}
+
+.tr-note code {
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.tr-empty {
+  margin: 0;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.tr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-row-between {
+  justify-content: space-between;
+}
+
+.tr-count,
+.tr-time {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   按钮
+   ============================================================ */
+
+.tr-btn {
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  line-height: 1.5;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.tr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tr-btn-primary {
+  color: #ffffff;
+  background: var(--accent-500, #4f46e5);
+}
+
+.tr-btn-primary:not(:disabled):hover {
+  background: var(--accent-600, #4338ca);
+}
+
+.tr-btn-ghost {
+  color: #374151;
+  background: transparent;
+  border-color: #d1d5db;
+}
+
+.tr-btn-ghost:not(:disabled):hover {
+  background: #f9fafb;
+}
+
+.tr-btn-mini {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+
+/* ============================================================
+   输入
+   ============================================================ */
+
+.tr-textarea,
+.tr-input,
+.tr-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #111827;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  outline: none;
+}
+
+.tr-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.tr-textarea-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.tr-textarea:focus,
+.tr-input:focus,
+.tr-select:focus {
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.tr-input-flex {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.tr-select {
+  width: auto;
+  min-width: 180px;
+}
+
+.tr-chip {
+  padding: 2px 9px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border: 1px solid var(--accent-200, #c7d2fe);
+  border-radius: 999px;
+}
+
+.tr-chip-hint {
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   字段
+   ============================================================ */
+
+.tr-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.tr-field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.tr-field-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   结果与历史正文
+   ============================================================ */
+
+/* `white-space: pre-wrap` 让译文里的换行保留下来；`user-select: text` 让用户
+ * 能直接选中复制（卡片那条路依赖剪贴板权限，这一条不依赖）。 */
+.tr-result-text {
+  font-size: 13px;
+  line-height: 1.85;
+  color: #111827;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.tr-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tr-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 7px;
+}
+
+.tr-history-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tr-history-head .tr-time {
+  flex: 1 1 auto;
+}
+
+.tr-history-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #374151;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* ============================================================
+   模型列表与标签
+   ============================================================ */
+
+.tr-cache {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tr-cache-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tr-model {
+  padding: 4px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.tr-model:hover {
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-model-on {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-color: var(--accent-400, #818cf8);
+  font-weight: 600;
+}
+
+.tr-tag {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.7;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.tr-tag-ok {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.tr-tag-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.tr-tag-muted {
+  color: #6b7280;
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+}
+
+.tr-key-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 「已保存」那一闪。固定在右下角，不占布局高度 —— 否则保存一次会让整页跳一下。 */
+.tr-flash {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #ffffff;
+  background: rgba(31, 41, 55, 0.92);
+  border-radius: 7px;
+}
+
+.tr-footnote {
+  margin: 0;
+  padding-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.75;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   翻译工作台（主视图）
+   ============================================================ */
+
+/* 工作台用更亮的一档边框与一层很浅的阴影把它从"配置卡片"里挑出来 —— 它是这一屏
+ * 上用户真正要用的东西。与 `.tr-card-result` 同一个取向，但那个是"结果"，这个是
+ * "输入"。 */
+.tr-card-workspace {
+  gap: 10px;
+  border-color: var(--accent-300, #a5b4fc);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+}
+
+.tr-btn-lg {
+  padding: 8px 22px;
+  font-size: 13px;
+}
+
+.tr-row-lang {
+  gap: 10px;
+}
+
+.tr-lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tr-lang-label {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.tr-select-sm {
+  min-width: 140px;
+  padding: 5px 8px;
+}
+
+.tr-arrow {
+  color: #9ca3af;
+}
+
+/* 工作台里的结果与"翻译"按钮在同一张卡片里 —— 翻完不必往下滚去找它。 */
+.tr-workspace-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+/* ============================================================
+   统计
+   ============================================================ */
+
+.tr-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tr-stat {
+  flex: 1 1 120px;
+  min-width: 110px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+.tr-stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.tr-stat-label {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   热键那一节
+   ============================================================ */
+
+/* 展开区与"状态行"之间留一点距离：状态行在收起时也要显示（它回答的是"这一节
+ * 能不能用"），而展开之后它是下面那些控件的上下文。 */
+.tr-hotkey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #eef0f3;
+}
+
+/* ============================================================
+   录制式组合键控件
+   ============================================================
+   这一块的形状由一个约束决定：用户按组合键时**不能**有东西在跳。因此控件本身
+   是一个定宽的方块（按下去不会改变布局），而"在听"这件事由边框与一棵会呼吸的
+   圆点表达 —— 它们都不参与布局。 */
+
+.tr-recorder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-recorder {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 220px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: left;
+  color: #111827;
+  background: #ffffff;
+  border: 1px dashed #d1d5db;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.tr-recorder:hover:not(:disabled) {
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-recorder:focus-visible {
+  outline: none;
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.tr-recorder:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 录制中：实线 + 主色 + 左侧那棵会呼吸的圆点。颜色之外还改了线型，
+ * 因此色觉不同的人也能分辨"它在听"。 */
+.tr-recorder-on,
+.tr-recorder-on:hover:not(:disabled) {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-style: solid;
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-recorder-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.tr-recorder-empty {
+  color: #9ca3af;
+}
+
+.tr-recorder-on .tr-recorder-value {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* 实时预览：按下一个修饰键就会看到它出现，因此用户知道"它听见了"。 */
+.tr-recorder-wait {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--accent-600, #4338ca);
+}
+
+.tr-recorder-on .tr-recorder-value::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--accent-500, #4f46e5);
+  animation: tr-recorder-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes tr-recorder-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* 不再录了就别再动：动画是"它还在等你按"的信号，留着会变成一个假的等待。 */
+@media (prefers-reduced-motion: reduce) {
+  .tr-recorder-on .tr-recorder-value::before {
+    animation: none;
+  }
+}
+
+.tr-recorder-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* 提示行：录制中给规则、"按了一个不能用的键"时给原因。 */
+.tr-recorder-msg {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.tr-recorder-msg-warn {
+  color: #b45309;
+}
+
+.tr-sub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+.tr-sub-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* ============================================================
+   历史条目上的动作与展开
+   ============================================================ */
+
+.tr-history-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* 打开的那一条：全文贴在下方的框里，与预览区分开（预览是灰色的两行，这里是
+ * 完整正文）。 */
+.tr-open {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+}
+
+.tr-history-foot {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tr-tag-pin {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-color: var(--accent-200, #c7d2fe);
+}
+
+/* ============================================================
+   深色模式
+   ============================================================
+   宿主在插件文档自己的 `:root` 上挂 `.dark`，因此这里不需要（也不该）读
+   `prefers-color-scheme`。下面把每一处写死的浅色都翻一遍。 */
+
+:root.dark .tr-title,
+:root.dark .tr-field-label,
+:root.dark .tr-card-title,
+:root.dark .tr-result-text,
+:root.dark .tr-status-value {
+  color: #e5e7eb;
+}
+
+:root.dark .tr-loading,
+:root.dark .tr-note,
+:root.dark .tr-count,
+:root.dark .tr-time,
+:root.dark .tr-empty,
+:root.dark .tr-footnote,
+:root.dark .tr-field-hint,
+:root.dark .tr-chip-hint,
+:root.dark .tr-status-detail,
+:root.dark .tr-status-label {
+  color: #6b7280;
+}
+
+:root.dark .tr-sub,
+:root.dark .tr-hint,
+:root.dark .tr-history-text {
+  color: #9ca3af;
+}
+
+:root.dark .tr-sub kbd {
+  color: #e5e7eb;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-hint {
+  background: #151823;
+  border-left-color: var(--accent-800, #3730a3);
+}
+
+:root.dark .tr-status,
+:root.dark .tr-card {
+  background: #151823;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-card-result {
+  border-color: var(--accent-800, #3730a3);
+  box-shadow: none;
+}
+
+:root.dark .tr-textarea,
+:root.dark .tr-input,
+:root.dark .tr-select {
+  color: #e5e7eb;
+  background: #10131c;
+  border-color: #2c3242;
+}
+
+/* 录制控件：静止态与输入框同一档，录制中翻成主色的深色底。 */
+:root.dark .tr-recorder {
+  color: #e5e7eb;
+  background: #10131c;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-recorder:hover:not(:disabled),
+:root.dark .tr-recorder:focus-visible {
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-recorder-on,
+:root.dark .tr-recorder-on:hover:not(:disabled) {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-recorder-empty,
+:root.dark .tr-recorder-hint {
+  color: #6b7280;
+}
+
+:root.dark .tr-recorder-wait {
+  color: #c7d2fe;
+}
+
+:root.dark .tr-recorder-msg {
+  color: #9ca3af;
+}
+
+/* 警告色在深色底上要**更亮**：`#b45309` 在 `#10131c` 上几乎看不见，
+ * 而这一行正是"为什么这个键不能用"的唯一解释。 */
+:root.dark .tr-recorder-msg-warn {
+  color: #fcd34d;
+}
+
+:root.dark .tr-note code {
+  color: #d1d5db;
+  background: #1a1f2b;
+}
+
+:root.dark .tr-chip {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--accent-800, #3730a3);
+}
+
+:root.dark .tr-btn-ghost {
+  color: #d1d5db;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-btn-ghost:not(:disabled):hover {
+  background: #1a1f2b;
+}
+
+:root.dark .tr-history-item {
+  background: #10131c;
+  border-color: #232838;
+}
+
+:root.dark .tr-model {
+  color: #d1d5db;
+  background: #10131c;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-model-on {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-tag-ok {
+  color: #86efac;
+  background: rgba(21, 128, 61, 0.16);
+  border-color: #14532d;
+}
+
+:root.dark .tr-tag-error {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.16);
+  border-color: #7f1d1d;
+}
+
+:root.dark .tr-tag-muted {
+  color: #9ca3af;
+  background: #1a1f2b;
+  border-color: #2c3242;
+}
+
+:root.dark .tr-banner-info {
+  color: #bfdbfe;
+  background: rgba(30, 64, 175, 0.18);
+  border-color: #1e3a8a;
+}
+
+:root.dark .tr-banner-success {
+  color: #86efac;
+  background: rgba(21, 128, 61, 0.16);
+  border-color: #14532d;
+}
+
+:root.dark .tr-banner-warn,
+:root.dark .tr-banner-warning {
+  color: #fcd34d;
+  background: rgba(180, 83, 9, 0.16);
+  border-color: #78350f;
+}
+
+:root.dark .tr-banner-error {
+  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.16);
+  border-color: #7f1d1d;
+}
+
+:root.dark .tr-status-ok {
+  color: #86efac;
+}
+
+:root.dark .tr-status-warn {
+  color: #fcd34d;
+}
+
+:root.dark .tr-status-error {
+  color: #fca5a5;
+}
+
+/* 工作台、统计格、热的展开区、打开的那一条 —— 浅色底一律翻成比卡片更深一档。 */
+:root.dark .tr-card-workspace {
+  border-color: var(--accent-800, #3730a3);
+  box-shadow: none;
+}
+
+:root.dark .tr-workspace-result,
+:root.dark .tr-stat,
+:root.dark .tr-sub-card {
+  background: #10131c;
+  border-color: #232838;
+}
+
+:root.dark .tr-stat-value,
+:root.dark .tr-sub-title {
+  color: #e5e7eb;
+}
+
+:root.dark .tr-stat-label,
+:root.dark .tr-lang-label {
+  color: #6b7280;
+}
+
+:root.dark .tr-hotkey-body {
+  border-top-color: #232838;
+}
+
+:root.dark .tr-open {
+  background: #151823;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-tag-pin {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
+}
