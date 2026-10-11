@@ -102,14 +102,14 @@ clipboard-history/
 
 ## 版本前提
 
-清单里写的是 `"engines": { "modulith": ">=1.6.4" }`。
+清单里写的是 `"engines": { "modulith": ">=1.7.0" }`。
 
 **这个下限不能再低。** 本插件依赖的 `clipboard-monitor` 权限与 `ctx.clipboard` 的
-`canMonitor / subscribe / readFormats / readImage` 都是 **1.6.4** 才有的。更旧的宿主
+`canMonitor / subscribe / readFormats / readImage` 都是 **1.7.0** 才有的。更旧的宿主
 （包括 1.6.3）不会给出任何兼容性提示，而插件在里面根本跑不起来：`canMonitor()` 恒为假，
 订阅与读图片都不可用。
 
-因此**宿主 1.6.4 必须先正式发布，本插件才能上架**；在此之前它只能以开发链接的方式在
+因此**宿主 1.7.0 必须先正式发布，本插件才能上架**；在此之前它只能以开发链接的方式在
 本机试用。若最终发布时宿主改了版本号，这里的字符串必须跟着改**并重新打包** —— 包变了
 就升插件版本，不要在原版本号上覆盖产物。
 

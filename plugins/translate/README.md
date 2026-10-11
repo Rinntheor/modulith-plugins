@@ -466,9 +466,9 @@ translate/
 
 ## 版本前提
 
-清单里写的是 `"engines": { "modulith": ">=1.6.4" }`，插件版本是 **2.0.0**。
+清单里写的是 `"engines": { "modulith": ">=1.7.0" }`，插件版本是 **2.0.0**。
 
-**这个下限不能再低。** 本插件依赖四样 1.6.x 才有的东西：
+**这个下限不能再低。** 本插件依赖四样 1.7.0 才有的东西：
 
 1. `ctx.hotkey` 与 `ctx.selection`（宿主侧 `hotkey.rs` / `selection.rs`，含
    `global-hotkey` 与 `read-selection` 两项权限）；

@@ -30,7 +30,7 @@
     "划词"
   ],
   "engines": {
-    "modulith": ">=1.6.4"
+    "modulith": ">=1.7.0"
   },
   "runtime": "sandboxed",
   "main": "index.js",
