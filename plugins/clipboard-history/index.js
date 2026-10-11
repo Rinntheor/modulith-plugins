@@ -88,6 +88,16 @@
   /** 列表一页多少条。SQLite 的 `LIMIT` 用它，滚动到底时再取下一页。 */
   var PAGE_SIZE = 200;
 
+  /**
+   * 一次最多取多少条。
+   *
+   * 刷新列表时请求的条数是"当前已经载入多少条"，好让用户翻出来的后面几页不被
+   * 丢掉（丢掉会让内容高度塌陷、滚动位置被夹回去）。这个上限兜住最坏情况：
+   * 一条记录的预览按几百字节算，5000 条也就是一两 MB 的 IPC 体积。
+   * 要走到这个上限得点 25 次「载入更多」，正常使用到不了。
+   */
+  var MAX_FETCH_LIMIT = 5000;
+
   /** 下面这些是**兜底**，正常情况下以设置页里的值为准。 */
   var FALLBACK = {
     captureEnabled: true,
@@ -1208,9 +1218,14 @@
    * 游标是 `(post_time, id)` 的严格小于，配合复合索引就是一次范围扫描。
    * 排序键必须与索引一致（`post_time DESC, id DESC`），否则 SQLite 会退化成排序。
    */
-  function fetchPage(query, cursor) {
+  function fetchPage(query, cursor, limit) {
     var search = query ? query.trim() : '';
     var anchor = cursor && typeof cursor.postTime === 'number' ? cursor : null;
+    // 一页取多少条。缺省就是 `PAGE_SIZE`；**刷新时调用方会传一个更大的值**，用的
+    // 是"当前已经载入多少条" —— 理由见组件里那条取数 effect（一句话：刷新不应该
+    // 把用户已经翻出来的后面几页丢掉）。上限兜住最坏情况的内存与 IPC 体积。
+    var take =
+      typeof limit === 'number' && limit > 0 ? Math.min(Math.floor(limit), MAX_FETCH_LIMIT) : PAGE_SIZE;
 
     if (search) {
       // 搜索在**正文全文**上做（`clipboard_bodies.body`），不在预览上 —— 否则
@@ -1239,10 +1254,10 @@
         params.push(anchor.postTime, anchor.id);
       }
       sql += ' ORDER BY e.post_time DESC, e.id DESC LIMIT ?' + (params.length + 1);
-      params.push(PAGE_SIZE);
+      params.push(take);
 
       return dbQuery(sql, params).then(function (rows) {
-        return { entries: rows.map(normalizeRow), hasMore: rows.length === PAGE_SIZE };
+        return { entries: rows.map(normalizeRow), hasMore: rows.length === take };
       });
     }
 
@@ -1263,10 +1278,10 @@
       listParams.push(anchor.postTime, anchor.id);
     }
     listSql += ' ORDER BY post_time DESC, id DESC LIMIT ?' + (listParams.length + 1);
-    listParams.push(PAGE_SIZE);
+    listParams.push(take);
 
     return dbQuery(listSql, listParams).then(function (rows) {
-      return { entries: rows.map(normalizeRow), hasMore: rows.length === PAGE_SIZE };
+      return { entries: rows.map(normalizeRow), hasMore: rows.length === take };
     });
   }
 
@@ -1521,50 +1536,152 @@
   function VirtualList(props) {
     var entries = props.entries;
     var containerRef = React.useRef(null);
+    var listRef = React.useRef(null);
     var heightsRef = React.useRef({});
     var spacerPair = React.useState({ top: 0, bottom: 0, start: 0, end: 0 });
     var spacer = spacerPair[0];
     var setSpacer = spacerPair[1];
 
+    // 事件回调与 `ResizeObserver` 里要读"最新一次渲染看到的东西"。放进 ref 是因为
+    // 那些回调在挂载时创建一次，闭包住的只会是挂载那一刻的数据（原因见 `recompute`）。
+    var latestRef = React.useRef({ entries: entries, spacer: spacer });
+    var anchorRef = React.useRef(null);
+    var recomputeRef = React.useRef(function () {});
+    latestRef.current = { entries: entries, spacer: spacer };
+
     var ESTIMATED = 78;
 
-    function recompute() {
-      var container = containerRef.current;
-      if (!container) return;
+    /**
+     * 把当前数据摊成"每一行的内容偏移"。
+     *
+     * `offsets[i]` 是第 i 行**在滚动内容里的真实起始位置**，必须与 DOM 里的实际
+     * 布局逐像素一致 —— `paddingTop` 用它算出"被移除的那些行一共多高"，算错了
+     * 占位就与真实高度不等，视口里的内容会漂移。
+     *
+     * 这也是量 `.ch-row-wrap` 本身、而把行间距放在那一层的 `padding-bottom` 上的
+     * 原因（见 `index.css`）：量的盒子与排版的盒子必须是同一个，算术才闭合。
+     */
+    function measureGeometry() {
+      var list = latestRef.current.entries;
       var heights = heightsRef.current;
       var offsets = [0];
       var total = 0;
-      for (var i = 0; i < entries.length; i++) {
-        var measured = heights[entries[i].id];
-        total += measured || ESTIMATED;
+      for (var i = 0; i < list.length; i++) {
+        total += heights[String(list[i].id)] || ESTIMATED;
         offsets.push(total);
       }
+      return { offsets: offsets, total: total };
+    }
+
+    /**
+     * 重新量一遍**当前真的挂在 DOM 里**的那些行。
+     *
+     * 行高不是一次定下来的：缩略图加载完、文字折行都会让它变。只观察滚动容器发现
+     * 不了这件事（容器高度由我们自己的 padding 决定），而量不到新的行高，`offsets`
+     * 就会一直用旧的，滚动条与内容逐渐对不上。
+     */
+    function remeasureRows() {
+      var list = listRef.current;
+      if (!list) return false;
+      var changed = false;
+      var children = list.children;
+      for (var i = 0; i < children.length; i++) {
+        var node = children[i];
+        var id = node.getAttribute && node.getAttribute('data-entry-id');
+        if (!id) continue;
+        var height = node.getBoundingClientRect().height;
+        if (height > 0 && heightsRef.current[id] !== height) {
+          heightsRef.current[id] = height;
+          changed = true;
+        }
+      }
+      return changed;
+    }
+
+    /**
+     * 按当前滚动位置决定渲染哪一段。
+     *
+     * **它绝不闭包任何一次渲染的 `entries` / `spacer`。** 这是这里最容易写错的一处：
+     * 滚动监听与 `ResizeObserver` 都只在挂载时创建一次，闭包住的会是**挂载那一刻**
+     * 的数组；而数据每来一条新记录就被整体换掉一次。拿旧数组算出来的 `start`/`end`
+     * 去切新数组，切出来的片段与占位高度对不上，内容高度随之塌掉，浏览器把
+     * `scrollTop` 夹回去 —— 表现就是"滚下去又被弹回原处"。
+     */
+    function recompute() {
+      var container = containerRef.current;
+      if (!container) return;
+      var list = latestRef.current.entries;
+      var rendered = latestRef.current.spacer;
+      var geometry = measureGeometry();
+      var offsets = geometry.offsets;
+      var total = geometry.total;
       var scrollTop = container.scrollTop;
       var viewport = container.clientHeight || 600;
       var start = 0;
-      while (start < entries.length && offsets[start + 1] < scrollTop - OVERSCAN_PX) start++;
+      while (start < list.length && offsets[start + 1] < scrollTop - OVERSCAN_PX) start++;
       var end = start;
-      while (end < entries.length && offsets[end] < scrollTop + viewport + OVERSCAN_PX) end++;
+      while (end < list.length && offsets[end] < scrollTop + viewport + OVERSCAN_PX) end++;
+
+      // 记下"视口顶部正在看哪一条、被滚过去了多少"。数据变化之后靠这两个值把视口
+      // 锚回同一条的同一个相对位置 —— 见下面那条锚定 effect。
+      var anchorIndex = start;
+      while (anchorIndex + 1 < list.length && offsets[anchorIndex + 1] <= scrollTop) anchorIndex++;
+      if (list.length > 0) {
+        anchorRef.current = { id: list[anchorIndex].id, delta: scrollTop - offsets[anchorIndex] };
+      }
 
       var top = offsets[start];
       var bottom = total - offsets[end];
       if (
-        spacer.top !== top ||
-        spacer.bottom !== bottom ||
-        spacer.start !== start ||
-        spacer.end !== end
+        rendered.top !== top ||
+        rendered.bottom !== bottom ||
+        rendered.start !== start ||
+        rendered.end !== end
       ) {
         setSpacer({ top: top, bottom: bottom, start: start, end: end });
       }
     }
+    recomputeRef.current = recompute;
 
     // 每次渲染之后重算一次。**没有依赖数组是有意的**：这一层要跟着"行高被测出来了"
     // 与"条目变了"两件事走，而后者可能是"长度相同但内容不同"（改了一条置顶）。
-    // 代价是一次 O(可见行数) 的循环，`setSpacer` 只在结果真的变了时才调用。
-    React.useEffect(function () {
-      recompute();
+    // 用 `useLayoutEffect` 而不是 `useEffect`：占位高度要在浏览器绘制**之前**就调准，
+    // 否则会先画一帧旧几何、再画一帧新几何，滚动时看着就是"抖一下"。
+    React.useLayoutEffect(function () {
+      remeasureRows();
+      recomputeRef.current();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     });
+
+    /**
+     * 数据变化之后把视口锚回原处。
+     *
+     * 新记录是**插到最前面**的，它的高度会把下面所有内容整体推下去。没有这一步的
+     * 表现很具体：一边翻旧记录一边复制东西，每复制一次列表就自己跳一下。
+     *
+     * 锚点找不到了（被删掉、被搜索过滤掉）就什么都不做 —— 那种情况下用户本来就在
+     * 看别的东西了。
+     */
+    React.useLayoutEffect(
+      function () {
+        var container = containerRef.current;
+        var anchor = anchorRef.current;
+        if (!container || !anchor || anchor.id === undefined) return;
+        var list = latestRef.current.entries;
+        var index = -1;
+        for (var i = 0; i < list.length; i++) {
+          if (String(list[i].id) === String(anchor.id)) {
+            index = i;
+            break;
+          }
+        }
+        if (index < 0) return;
+        var target = measureGeometry().offsets[index] + anchor.delta;
+        if (Math.abs(container.scrollTop - target) > 1) container.scrollTop = target;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      },
+      [props.entries]
+    );
 
     // 换了搜索词或清空之后把滚动位置拉回顶部。
     // 不做这一步的表现很具体：滚到第 500 行、改成只匹配 3 条的搜索词，容器仍然停在
@@ -1572,6 +1689,8 @@
     React.useEffect(
       function () {
         var container = containerRef.current;
+        // 换了搜索词就不是同一次浏览了，锚点作废。
+        anchorRef.current = null;
         if (container) container.scrollTop = 0;
       },
       [props.resetKey]
@@ -1581,18 +1700,21 @@
       var container = containerRef.current;
       if (!container) return undefined;
       function onScroll() {
-        recompute();
+        recomputeRef.current();
       }
       container.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
 
+      // 行高变化只有一个可靠信号：`.ch-list` 自己的高度变了（缩略图加载完、文字折行）。
+      // 它也会被我们改占位的动作触发，因此回调里先"重新量一遍"，只有在**真的量到了
+      // 新行高**时才继续重算 —— 否则会与自己的 `setSpacer` 来回触发。
       var observer = null;
       if (typeof ResizeObserver !== 'undefined') {
         observer = new ResizeObserver(function () {
-          recompute();
+          if (remeasureRows()) recomputeRef.current();
         });
-        observer.observe(container);
+        if (listRef.current) observer.observe(listRef.current);
       }
-      window.addEventListener('resize', onScroll);
 
       return function () {
         container.removeEventListener('scroll', onScroll);
@@ -1602,29 +1724,21 @@
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    function measure(id, node) {
-      if (!node) return;
-      var height = node.getBoundingClientRect().height;
-      if (height > 0 && heightsRef.current[id] !== height) {
-        heightsRef.current[id] = height;
-      }
-    }
-
     var slice = entries.slice(spacer.start, spacer.end);
 
     return h(
       'div',
       { className: 'ch-scroll', ref: containerRef },
-      h('div', { className: 'ch-list', style: { paddingTop: spacer.top, paddingBottom: spacer.bottom } },
+      h('div', { className: 'ch-list', ref: listRef, style: { paddingTop: spacer.top, paddingBottom: spacer.bottom } },
         slice.map(function (entry) {
           return h(
             'div',
             {
               key: entry.id,
               className: 'ch-row-wrap',
-              ref: function (node) {
-                if (node) measure(entry.id, node.firstChild);
-              },
+              // 行高是**从 DOM 上量**的（`remeasureRows` 按这个属性认行），因此不再
+              // 需要逐行挂 `ref` —— 那种写法每次渲染都要重新绑定一次回调。
+              'data-entry-id': String(entry.id),
             },
             h(EntryRow, {
               entry: entry,
@@ -1919,6 +2033,9 @@
     // 让取数 effect **不依赖 `query`** —— 依赖它的话每次按键都会立刻查一次 1 万行的
     // 全文匹配，防抖那一层就成了摆设。
     var queryRef = React.useRef('');
+    // 上一次**真正查过**的搜索词。用来区分"这一趟是换了搜索词"还是"数据变了"：
+    // 前者只能取一页（旧条数对新结果没有意义），后者要取够已经翻出来的那些条。
+    var fetchedQueryRef = React.useRef(null);
     var toastTimer = React.useRef(null);
     var searchTimer = React.useRef(null);
 
@@ -1988,7 +2105,20 @@
       function () {
         if (!ready || core.dbError) return undefined;
         var alive = true;
-        fetchPage(queryRef.current, null)
+        var searching = fetchedQueryRef.current !== queryRef.current;
+        fetchedQueryRef.current = queryRef.current;
+
+        // **取够用户已经翻出来的那些条。**
+        //
+        // 原来这里固定取第一页（200 条）。问题是「载入更多」会把后面几页并进列表，
+        // 而这条 effect 每次数据变化都跑一遍（复制了新东西、置顶、删除）—— 一个
+        // 只有 200 条的替换于是把用户翻出来的 1000 条全丢掉：内容高度塌掉，浏览器
+        // 随即把 `scrollTop` 夹回它还能容纳的位置。用户看到的就是"滚到一半被弹回去，
+        // 而且怎么滚都滚不下去"。
+        //
+        // 换成搜索词时不能这么做：旧条数对新结果没有意义，按一页取。
+        var wanted = searching ? PAGE_SIZE : Math.max(PAGE_SIZE, entriesRef.current.length);
+        fetchPage(queryRef.current, null, wanted)
           .then(function (page) {
             if (!alive) return;
             setEntries(page.entries);

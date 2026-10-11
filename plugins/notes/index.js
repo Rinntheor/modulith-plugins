@@ -135,6 +135,80 @@
   }
 
   // ============================================================
+  // 两步确认按钮  ← 替代 window.confirm
+  // ============================================================
+  //
+  // 为什么不用 `window.confirm`：这个宿主里 `tauri-plugin-dialog` 注入的脚本把
+  // `confirm` 换成了**走 IPC 的 `async` 版本**，于是 `!window.confirm(...)` 取反的是
+  // 一个 Promise —— **永远是 `false`**。"用户点了取消"根本拦不住，速记照样被删掉。
+  // 这是**数据丢失级**的缺陷，不是观感问题。
+  //
+  // 为什么不用宿主的 `ctx.ui.dialog`：那个接口需要 `notification` 权限，而本插件
+  // 只声明了 `storage`。给一个已发布的插件加权限是一次**权限升级**（按 MAJOR 升版），
+  // 只为"删一条速记问一句"多要一项权限，代价不成比例。
+  //
+  // 这里的做法：第一次点击**什么也不做，只把按钮变成「确认删除？」**，几秒内再点
+  // 一次才真的删。它不是模态框，因此不打断用户，也不挡住别的东西。
+  // 每个插件是独立 bundle，**不能跨插件 import**，因此这份实现各自留一份
+  // （`quick-launch` 的 `feat/quick-launch-pro` 分支上有一份同名、同交互的实现）。
+
+  /** 进入「确认」态后等多久自动退回原状 */
+  var CONFIRM_TIMEOUT_MS = 4000;
+
+  function ConfirmButton(props) {
+    var armedPair = React.useState(false);
+    var armed = armedPair[0];
+    var setArmed = armedPair[1];
+    var timerRef = React.useRef(null);
+
+    // 卸载时清掉定时器：否则组件已经不在了，回调还会去 setState
+    React.useEffect(function () {
+      return function () {
+        if (timerRef.current) clearTimeout(timerRef.current);
+      };
+    }, []);
+
+    /** 退回未确认态。取消、失焦、超时三条路径都走它，因此只有一处写状态 */
+    function disarm() {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setArmed(false);
+    }
+
+    function onClick() {
+      if (!armed) {
+        // 第一次点击：只是把按钮"上膛"，**绝不执行**删除
+        setArmed(true);
+        timerRef.current = setTimeout(function () {
+          timerRef.current = null;
+          setArmed(false);
+        }, CONFIRM_TIMEOUT_MS);
+        return;
+      }
+      disarm();
+      props.onConfirm();
+    }
+
+    return h(
+      'button',
+      {
+        className: props.className + (armed ? ' nt-btn-armed' : ''),
+        type: 'button',
+        title: armed ? '再点一次就删除' : props.title,
+        onClick: onClick,
+        // 失焦一律撤销：用户去点别处，说明他不是要删
+        onBlur: disarm,
+        // 无障碍：屏幕阅读器上按钮文案会变，但 aria-label 给出的是完整动作，
+        // 因此两次点击读出来是两件不同的事（"删除" / "确认删除"）
+        'aria-label': armed ? '确认删除这条速记' : props.label,
+      },
+      armed ? props.confirmLabel || '确认删除？' : props.label
+    );
+  }
+
+  // ============================================================
   // 界面
   // ============================================================
 
@@ -286,12 +360,18 @@
         });
     }
 
+    /**
+     * 真的删掉一条速记。
+     *
+     * **它自己不做确认。** 确认由调用点上的两步确认按钮负责（见 `ConfirmButton`）——
+     * 把"问一句"和"动手"分开，是为了让这个函数只有一条进入路径：
+     * 确认按钮的第二次点击。
+     */
     function remove(id) {
       var target = (itemsRef.current || []).filter(function (i) {
         return i.id === id;
       })[0];
       if (!target) return;
-      if (!window.confirm('删除这条速记？\n\n' + titleOf(target.text))) return;
       persist(
         (itemsRef.current || []).filter(function (i) {
           return i.id !== id;
@@ -502,18 +582,15 @@
                   },
                   '修改'
                 ),
-                h(
-                  'button',
-                  {
-                    className: 'nt-btn nt-btn-mini nt-btn-danger',
-                    type: 'button',
-                    title: '删除',
-                    onClick: function () {
-                      remove(item.id);
-                    },
+                h(ConfirmButton, {
+                  className: 'nt-btn nt-btn-mini nt-btn-danger',
+                  label: '删除',
+                  title: '删除',
+                  confirmLabel: '确认删除？',
+                  onConfirm: function () {
+                    remove(item.id);
                   },
-                  '删除'
-                )
+                })
               )
             )
           );

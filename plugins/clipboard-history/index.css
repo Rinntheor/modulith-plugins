@@ -299,17 +299,39 @@
   margin-top: 12px;
   overflow-y: auto;
   border-radius: 11px;
+
+  /*
+   * **窗口化列表必须关掉浏览器的滚动锚定（scroll anchoring）。**
+   *
+   * Chromium 会盯着"视口上方那些内容"的尺寸变化，并自动改 `scrollTop` 去补偿，
+   * 目的是让用户正在看的东西别乱动。而窗口化的做法恰恰是**主动**把已经滚过去的那
+   * 些行换成等高的 `padding-top` —— 浏览器把这件事理解成"上面的内容变矮了"，
+   * 于是把 `scrollTop` 往回拉；拉回去又触发一次 `scroll`，我们再把占位调一次，
+   * 两边互相纠正。用户看到的就是"滚下去，随即被弹回原位，滚不动"。
+   *
+   * 关掉它是安全的，因为视口位置由 `VirtualList` 自己负责 —— 包括新记录插到最
+   * 前面时把视口锚回原处（见那里的锚定 effect）。
+   */
+  overflow-anchor: none;
 }
 
+/*
+ * **行间距不要用 `gap`。**
+ *
+ * 窗口化的几何算术要求"量的盒子"就是"排版的盒子"：`VirtualList.remeasureRows()`
+ * 量的是 `.ch-row-wrap` 的高度，`offsets` 把它当作行间距一并累加。用 `gap` 时
+ * 间距由父元素负责、量不到，于是每一行的真实位置都比算术结果多出 8px，而
+ * `padding-top` 是按算术结果算的 —— 滚动条的位置与看到的行会逐渐对不上。
+ * 间距因此落在包装层自己的 `padding-bottom` 上。
+ */
 .ch-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: block;
 }
 
 .ch-row-wrap {
-  /* 窗口化的测量单位：`VirtualList` 量的是这个包装层里第一层的实际高度 */
+  /* 窗口化的测量单位：`VirtualList` 量的是这一层本身，行间距也在这里 */
   display: block;
+  padding-bottom: 8px;
 }
 
 .ch-row {

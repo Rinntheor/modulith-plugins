@@ -154,6 +154,18 @@
   border-color: #fecaca;
 }
 
+/* 两步确认的「上膛」态：第一次点击后按钮变红，第二次点击才真的删。
+   它是**持续**的红，而不是悬停的红 —— 用户只要看按钮就知道自己站在第二步。 */
+.nt-btn-armed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.nt-btn-armed:hover {
+  background: #fee2e2;
+}
+
 /* ============================================================
    列表
    ============================================================ */
@@ -418,6 +430,16 @@
   color: #fca5a5;
   background: rgba(127, 29, 29, 0.25);
   border-color: #7f1d1d;
+}
+
+:root.dark .nt-btn-armed {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.25);
+  border-color: #7f1d1d;
+}
+
+:root.dark .nt-btn-armed:hover {
+  background: rgba(127, 29, 29, 0.4);
 }
 
 :root.dark .nt-item-rest {
