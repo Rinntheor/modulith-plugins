@@ -973,6 +973,173 @@
     });
   }
 
+  // ============================================================
+  // 组合键：把一次按键变成宿主认得的那种字符串
+  // ============================================================
+  //
+  // ============================================================
+  // 这个语法**已经有两份实现**，这里是第三份 —— 因此必须写清楚它在哪
+  // ============================================================
+  //
+  //   1. `src/services/shortcutRegistry.ts` 的 `parseCombo` / `normalizeCombo`
+  //      —— 语法的**起源**，宿主界面自己的快捷键表用它做冲突判定；
+  //   2. `src-tauri/src/modules/plugins/hotkey.rs` 的 `parse_combo` /
+  //      `normalize_combo` / `accelerator` —— 真正 `RegisterHotKey` 的那一侧。
+  //      `check:plugin-runtime` 把 (1) 与 (2) 钉在一次断言里（共享语料
+  //      `GRAMMAR_CASES`，两边逐条重算）。
+  //
+  // **这一份（面板里的录制器）排在第三条上，而且是唯一一份无法被门禁钉住的** ——
+  // 插件是一个单文件 IIFE，不许 import，因此它抄不到上面任何一份。只能靠：
+  //
+  //   * 只**产出**符合语法的字符串，不去解析用户的自由输入（上一版那个输入框
+  //     正是"让用户去写"才把这件事变得不可控：`Mod+K`、`ctrl + k`、
+  //     `mod+shift+alt+k` 都会原样落进设置，而后台那一侧认不认只能等一分钟）；
+  //   * 产出之后**交给宿主去判**：`ctx.hotkey.register` 返回的就是宿主按 (2)
+  //     规范化之后的值，后台注册的正是它（见下面 `registerCombo` 的注释）。
+  //
+  // 规矩与那两份完全一致：
+  //   · 全部小写；
+  //   · 修饰符别名 `mod`/`ctrl`/`cmd`/`meta` → `mod`、`shift`、`alt`/`option` → `alt`；
+  //   · 顺序固定 `mod+shift+alt+<主键>`（`shift+mod+tab` 与 `mod+shift+tab` 必须得到
+  //     同一个字符串，否则"冲突"会有两种表示，同一个组合会被当成两条）；
+  //   · **恰好一个主键**。
+
+  /** `KeyboardEvent.key` 之外的那些键名 —— 按 `named_virtual_key` 认的那一批抄。 */
+  var HOTKEY_NAMED_KEYS = {
+    backspace: 'backspace',
+    tab: 'tab',
+    enter: 'enter',
+    escape: 'escape',
+    ' ': 'space',
+    spacebar: 'space',
+    pageup: 'pageup',
+    pagedown: 'pagedown',
+    end: 'end',
+    home: 'home',
+    arrowleft: 'left',
+    arrowup: 'up',
+    arrowright: 'right',
+    arrowdown: 'down',
+    insert: 'insert',
+    delete: 'delete',
+  };
+
+  /**
+   * 一次按键的 `event.key` → 宿主认的主键名；认不出来时返回 `''`。
+   *
+   * **认不出来就不产出**：把它当成别的键会让用户"按下了 A、绑定却变成了 B"，
+   * 而那种错比一句「这个键不支持」难查得多（与 `named_virtual_key` 一条取舍）。
+   */
+  function hotkeyKeyName(key) {
+    var raw = String(key || '');
+    var lower = raw.toLowerCase();
+
+    if (lower.length === 1 && ((lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9'))) {
+      return lower;
+    }
+    // F1..F24：`f` 后面必须**全是数字**（`f` 与 `f24x` 不是功能键）。
+    if (/^f\d{1,2}$/.test(lower)) {
+      var number = Number(lower.slice(1));
+      if (number >= 1 && number <= 24) return lower;
+      return '';
+    }
+    return HOTKEY_NAMED_KEYS[lower] || '';
+  }
+
+  /** 主键是不是**可以单独占用**的功能键 —— 宿主 `accel` 的 `key_may_be_bare` 抄一份。 */
+  function isFunctionKey(name) {
+    return /^f([1-9]|1\d|2[0-4])$/.test(String(name || ''));
+  }
+
+  /**
+   * 把一次 keydown 变成规范化之后的组合键；不构成一个可以注册的组合时返回 `null`。
+   *
+   * 判据与宿主 `accelerator` 的两条拒绝**逐条对应**：
+   *   · 认不出主键 → `null`（宿主会说"没有对应的虚拟键码"）；
+   *   · 一个修饰符都没有、而主键又不是 F1..F24 → `null`（宿主那句话是这个面板
+   *     上最难自己想到的一条，因此界面必须**在保存之前**就把它说出来）。
+   */
+  function comboFromEvent(event) {
+    var key = hotkeyKeyName(event.key);
+    if (key === '') return null;
+
+    var parts = [];
+    if (event.ctrlKey || event.metaKey) parts.push('mod');
+    if (event.shiftKey) parts.push('shift');
+    if (event.altKey) parts.push('alt');
+
+    if (parts.length === 0 && !isFunctionKey(key)) return null;
+    parts.push(key);
+    return parts.join('+');
+  }
+
+  /** 一次 keydown 是不是"只按下了修饰键"（这时录制必须继续等，不能就此结束）。 */
+  function isLoneModifierKey(event) {
+    return ['control', 'shift', 'alt', 'meta', 'os'].indexOf(String(event.key || '').toLowerCase()) !== -1;
+  }
+
+  /**
+   * 键盘事件 → 给用户看的一行预览（`Ctrl+Shift+Tab` 这种）。
+   *
+   * 它**只影响显示**：真正落盘的永远是 `comboFromEvent` 的产物（见上面那一节）。
+   * 不顺手从预览里拼字符串，是因为"给人看的写法"与"宿主认的写法"是两件事，
+   * 混用它们正是 `Mod+K` 那类值能进设置的原因。
+   */
+  function comboPreview(event) {
+    var key = hotkeyKeyName(event.key);
+    var parts = [];
+    if (event.ctrlKey || event.metaKey) parts.push('Ctrl');
+    if (event.shiftKey) parts.push('Shift');
+    if (event.altKey) parts.push('Alt');
+    if (key === '') parts.push('…');
+    else if (key === 'space') parts.push('Space');
+    else if (key.length === 1) parts.push(key.toUpperCase());
+    else if (isFunctionKey(key)) parts.push(key.toUpperCase());
+    else parts.push(key.charAt(0).toUpperCase() + key.slice(1));
+    return parts.join(' + ');
+  }
+
+  /**
+   * 规范化一个**已经符合语法**的组合键字符串（`[mod+][shift+][alt+]<主键>`）。
+   *
+   * 存在理由只有一个：面板上的值可能来自别处（上一版那个自由输入框留下的旧值、
+   * 或用户在设置页里手写的值），而渲染与比较都希望拿到稳定形态。
+   *
+   * 它**只重排与改写修饰符别名**，不认识的东西原样留着 —— 这不是一个校验器。
+   * 校验发生在两处，都比这里严格：录制时由 `comboFromEvent` 挡掉不能注册的组合，
+   * 落盘之后由宿主的 `accelerator()` 挡掉其余（它的错误信息是权威的）。
+   */
+  function canonicalCombo(combo) {
+    var text = String(combo || '').trim();
+    if (text === '') return '';
+
+    var mod = false;
+    var shift = false;
+    var alt = false;
+    var key = '';
+
+    text
+      .toLowerCase()
+      .split('+')
+      .forEach(function (part) {
+        var name = part.trim();
+        if (name === '') return;
+        if (name === 'mod' || name === 'ctrl' || name === 'cmd' || name === 'meta') mod = true;
+        else if (name === 'shift') shift = true;
+        else if (name === 'alt' || name === 'option') alt = true;
+        else if (key === '') key = name;
+      });
+
+    if (key === '') return '';
+
+    var prefix = [];
+    if (mod) prefix.push('mod');
+    if (shift) prefix.push('shift');
+    if (alt) prefix.push('alt');
+    prefix.push(key);
+    return prefix.join('+');
+  }
+
   /** 写一个设置项。失败必须**说出来** —— 静默丢掉一次写入是这里最坏的一种。 */
   function saveSetting(id, value) {
     if (!ctx.settings || typeof ctx.settings.set !== 'function') {
@@ -2433,17 +2600,21 @@
                 h(Field, {
                   label: '触发组合键',
                   hint:
-                    '语法是 mod+k / mod+shift+tab（mod 在 Windows 上是 Ctrl）。改完最多一分钟生效 —— 后台每 60 秒对一次账，因为那里没有设置变更回调。组合键在系统里是独占的，冲突时错误会点名是谁占着。',
-                }, h('input', {
-                  className: 'tr-input',
-                  type: 'text',
-                  value: view.triggerCombo,
-                  onChange: function (event) {
-                    editDraft(SETTING_IDS.triggerCombo, event.target.value);
+                    '点一下右边的方框，然后按下你要的组合键（不用手写）。只按功能键（F1..F24）或按住 Ctrl / Alt / Shift 中的至少一个 —— 单个普通键在这里会被拒绝，因为全局热键是独占的，它会把这个键从整台机器上所有程序里拿走。改完最多一分钟生效 —— 后台每 60 秒对一次账，因为那里没有设置变更回调。组合键在系统里是独占的，冲突时错误会点名是谁占着。',
+                }, h(HotkeyRecorder, {
+                  combo: view.triggerCombo,
+                  onCommit: function (combo) {
+                    // 先写草稿再落盘：`commit` 会按服务端实际值回读一次，而回读
+                    // 发生在它内部，因此这里必须先把草稿改成新的值（与上面那些
+                    // 输入框同一条路径，不另开一套保存逻辑）。
+                    editDraft(SETTING_IDS.triggerCombo, combo);
+                    return commit(SETTING_IDS.triggerCombo, combo);
                   },
-                  onBlur: function () {
-                    commit(SETTING_IDS.triggerCombo, view.triggerCombo.trim());
+                  onClear: function () {
+                    editDraft(SETTING_IDS.triggerCombo, '');
+                    return commit(SETTING_IDS.triggerCombo, '');
                   },
+                  onNotice: setNotice,
                 })),
 
                 h(
@@ -2558,6 +2729,222 @@
       h('label', { className: 'tr-field-label' }, props.label),
       props.hint ? h('p', { className: 'tr-field-hint' }, props.hint) : null,
       props.children
+    );
+  }
+
+  // ============================================================
+  // 录制式组合键控件
+  // ============================================================
+  //
+  // ============================================================
+  // 为什么是"按一下"而不是"打一行字"
+  // ============================================================
+  //
+  // 上一版这里是一个 `type="text"` 输入框，让用户**手写** `mod+k` 这一串。那有三个
+  // 具体的问题，而且都不是美观问题：
+  //
+  //   1. **用户要猜。** 语法只存在于文档与代码里（见上面"组合键"那一节），而输入框
+  //      没有任何东西告诉他 `Ctrl+K` 与 `mod+k` 是同一个键、`shift+mod+tab` 与
+  //      `mod+shift+tab` 也一样。写错的代价不是一句报错，而是"改完最多一分钟生效"
+  //      之后一次静默的注册失败。
+  //   2. **写出来的是字符串，按下去的是键。** 用户以为他填的是"我按的那个组合"，
+  //      实际填的是一个需要与后台解析器逐字对上的字符串 —— 这两者之间每一处不一致
+  //      都表现为"这个热键没反应"。
+  //   3. **边界全都要靠他记住。** 宿主拒绝裸的非功能键（那会把那个键从整台机器上
+  //      拿走，见 `hotkey.rs::key_may_be_bare`）。输入框对此一无所知，只能等注册失败。
+  //
+  // 录制控件把这三件事都收回到控件自己身上：用户**按**他要的组合，控件负责把它
+  // 变成合法字符串，并在它不合法时立刻说清为什么。
+  //
+  // ============================================================
+  // 录制期间必须**吃掉**这次按键
+  // ============================================================
+  //
+  // `preventDefault()` + `stopPropagation()` 不是可选的：少一个都可能让这次按键
+  // 顺着宿主界面跑下去（宿主自己有一批 `Ctrl+K` 一类的快捷键），而那会变成
+  // "我按组合键时面板里别的东西也动了"。这里连 `keyCode` 都不去动 —— 只读。
+  function HotkeyRecorder(props) {
+    var recordingState = React.useState(false);
+    var recording = recordingState[0];
+    var setRecording = recordingState[1];
+
+    var previewState = React.useState('');
+    var preview = previewState[0];
+    var setPreview = previewState[1];
+
+    var messageState = React.useState('');
+    var message = messageState[0];
+    var setMessage = messageState[1];
+
+    // 组合键在设置里归一化之后的形态（空 = 没有绑定）。
+    var bound = canonicalCombo(props.combo);
+    // 保存一次之后就不再收键。少了它，`commit` 是异步的，用户在等的时候再按一下
+    // 就会叠上第二次保存（并且第二次是对着一个还没刷新的值）。
+    var finishedRef = React.useRef(false);
+    // 第几次录制。保存是异步的，而用户可能在它回来之前就取消了（Esc / 点别处 /
+    // 点了「清除绑定」）—— 那一次保存的成功回调**不许**再回来把控件改回静止态，
+    // 否则界面上显示的会是"已经录好了"，而用户刚刚明确说了不要它。
+    var sessionRef = React.useRef(0);
+
+    function stopRecording() {
+      setRecording(false);
+      setPreview('');
+    }
+
+    /** 开始录制。**清掉上一次的提示**：它是上一次的事实，留着会误导。 */
+    function begin() {
+      sessionRef.current += 1;
+      finishedRef.current = false;
+      setMessage('');
+      setPreview('');
+      setRecording(true);
+    }
+
+    /** Escape（不带修饰符）取消录制并把原来的值原样留着 —— 不落盘任何东西。 */
+    function cancel() {
+      sessionRef.current += 1;
+      finishedRef.current = true;
+      stopRecording();
+      setMessage('');
+      props.onNotice({
+        tone: 'info',
+        title: '已取消录制',
+        body: '组合键没有被改动（还是「' + (bound || '未设置') + '」）。',
+      });
+    }
+
+    function onKeyDown(event) {
+      if (!recording || finishedRef.current) return;
+
+      // 录制期间**任何**按键都不许再往下走：宿主界面上挂着自己的快捷键，
+      // 而用户此刻的意图是"在这个控件里按一个组合"。
+      event.preventDefault();
+      event.stopPropagation();
+
+      // 只按下修饰键时继续等：`Ctrl` 本身不是一个绑定，而把它当成"录好了"
+      // 会让用户永远录不出 `Ctrl+K`（他按下 Ctrl 的那一刻录制就结束了）。
+      if (isLoneModifierKey(event)) {
+        setPreview(comboPreview(event));
+        return;
+      }
+
+      // 不带修饰符的 Escape = 取消。带修饰符的 Escape 是一个**合法**的组合
+      // （`accelerator` 认 `escape`），因此它照常被录下来。
+      if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        cancel();
+        return;
+      }
+
+      var key = hotkeyKeyName(event.key);
+      if (key === '') {
+        // 认不出的键**不猜**：把它记成别的键会让用户"按了 A、绑成了 B"。
+        setPreview(comboPreview(event));
+        setMessage('这个键不能用作组合键。可用的是单个字母 / 数字、F1..F24，以及 ' +
+          'Backspace / Tab / Enter / Escape / Space / PageUp / PageDown / Home / End / ' +
+          '方向键 / Insert / Delete。');
+        return;
+      }
+
+      var combo = comboFromEvent(event);
+      if (combo === null) {
+        // 到这里只可能是"一个修饰符都没有、而主键又不是功能键"。把宿主那句话
+        // 抄给用户 —— 这是他在保存之前唯一能改主意的时刻。
+        setPreview(comboPreview(event));
+        setMessage('单个普通键不能做全局热键：那会把这个键从「整台机器」上所有程序里' +
+          '拿走（用户在任何一个程序里都打不出它）。请按住 Ctrl / Alt / Shift 中的至少一个' +
+          '再按这个键，或者改用 F1..F24。');
+        return;
+      }
+
+      finishedRef.current = true;
+      setPreview(comboPreview(event));
+
+      // 从这里起，"这一下按键算不算数"由保存的结果回答。**因此在结果回来之前
+      // 不收尾**：立刻把控件切回静止态会让用户以为录好了，而设置其实没写成。
+      setMessage('正在保存 ' + combo + '…');
+
+      var session = sessionRef.current;
+      var outcome = props.onCommit(combo);
+      if (!outcome || typeof outcome.then !== 'function') {
+        finishSuccess(session);
+        return;
+      }
+      outcome.then(
+        function () {
+          finishSuccess(session);
+        },
+        function () {
+          // 失败（或这个运行位置没有 ctx.settings）时留在录制态，并把刚才那一下
+          // 显示出来：用户再按一次就是重录。**不接受这个组合**，因为宿主也没接受。
+          if (sessionRef.current !== session) return;
+          finishedRef.current = false;
+          setMessage('没有保存。请再按一个组合键，或者按 Esc 取消。');
+        }
+      );
+    }
+
+    function finishSuccess(session) {
+      if (sessionRef.current !== session) return;
+      finishedRef.current = true;
+      stopRecording();
+      setMessage('');
+    }
+
+    var label = bound === '' ? '未设置' : bound;
+    var shown = recording ? '请按下组合键…' : label;
+
+    var button = h(
+      'button',
+      {
+        type: 'button',
+        className: 'tr-recorder' + (recording ? ' tr-recorder-on' : ''),
+        // 录制时把焦点留在自己身上：失焦会走到下面的 onBlur 分支，而用户点一下
+        // 别处本来也确实该取消 —— 两种情况语义一致。
+        onBlur: function () {
+          if (recording) cancel();
+        },
+        onClick: function () {
+          if (recording) cancel();
+          else begin();
+        },
+        onKeyDown: onKeyDown,
+        'aria-label': '触发组合键：' + label,
+        'aria-pressed': recording ? 'true' : 'false',
+        disabled: props.disabled === true,
+      },
+      h(
+        'span',
+        { className: 'tr-recorder-value' + (bound === '' && !recording ? ' tr-recorder-empty' : '') },
+        shown
+      ),
+      recording
+        ? h('span', { className: 'tr-recorder-wait' }, preview ? preview : '等待按键…')
+        : h('span', { className: 'tr-recorder-hint' }, '点击后按下组合键')
+    );
+
+    return h(
+      'div',
+      { className: 'tr-recorder-row' },
+      button,
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'tr-btn tr-btn-ghost tr-btn-mini',
+          // 已经"未设置"时再清一次没有意义 —— 禁用比一个点了什么都不发生的按钮诚实。
+          disabled: props.disabled === true || bound === '',
+          onClick: function () {
+            setMessage('');
+            stopRecording();
+            props.onClear();
+          },
+        },
+        '清除绑定'
+      ),
+      recording || message
+        ? h('p', { className: 'tr-recorder-msg' + (message ? ' tr-recorder-msg-warn' : '') },
+            message || '按住 Ctrl / Alt / Shift 中的至少一个再按主键；只按功能键（F1..F24）也可以。Esc 取消。')
+        : null
     );
   }
 

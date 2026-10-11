@@ -668,6 +668,132 @@
   border-top: 1px solid #eef0f3;
 }
 
+/* ============================================================
+   录制式组合键控件
+   ============================================================
+   这一块的形状由一个约束决定：用户按组合键时**不能**有东西在跳。因此控件本身
+   是一个定宽的方块（按下去不会改变布局），而"在听"这件事由边框与一棵会呼吸的
+   圆点表达 —— 它们都不参与布局。 */
+
+.tr-recorder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tr-recorder {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 220px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: left;
+  color: #111827;
+  background: #ffffff;
+  border: 1px dashed #d1d5db;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.tr-recorder:hover:not(:disabled) {
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-recorder:focus-visible {
+  outline: none;
+  border-color: var(--accent-400, #818cf8);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.tr-recorder:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 录制中：实线 + 主色 + 左侧那棵会呼吸的圆点。颜色之外还改了线型，
+ * 因此色觉不同的人也能分辨"它在听"。 */
+.tr-recorder-on,
+.tr-recorder-on:hover:not(:disabled) {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-style: solid;
+  border-color: var(--accent-400, #818cf8);
+}
+
+.tr-recorder-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.tr-recorder-empty {
+  color: #9ca3af;
+}
+
+.tr-recorder-on .tr-recorder-value {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+/* 实时预览：按下一个修饰键就会看到它出现，因此用户知道"它听见了"。 */
+.tr-recorder-wait {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--accent-600, #4338ca);
+}
+
+.tr-recorder-on .tr-recorder-value::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--accent-500, #4f46e5);
+  animation: tr-recorder-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes tr-recorder-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* 不再录了就别再动：动画是"它还在等你按"的信号，留着会变成一个假的等待。 */
+@media (prefers-reduced-motion: reduce) {
+  .tr-recorder-on .tr-recorder-value::before {
+    animation: none;
+  }
+}
+
+.tr-recorder-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* 提示行：录制中给规则、"按了一个不能用的键"时给原因。 */
+.tr-recorder-msg {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+.tr-recorder-msg-warn {
+  color: #b45309;
+}
+
 .tr-sub-card {
   display: flex;
   flex-direction: column;
@@ -779,6 +905,44 @@
   color: #e5e7eb;
   background: #10131c;
   border-color: #2c3242;
+}
+
+/* 录制控件：静止态与输入框同一档，录制中翻成主色的深色底。 */
+:root.dark .tr-recorder {
+  color: #e5e7eb;
+  background: #10131c;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-recorder:hover:not(:disabled),
+:root.dark .tr-recorder:focus-visible {
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-recorder-on,
+:root.dark .tr-recorder-on:hover:not(:disabled) {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
+}
+
+:root.dark .tr-recorder-empty,
+:root.dark .tr-recorder-hint {
+  color: #6b7280;
+}
+
+:root.dark .tr-recorder-wait {
+  color: #c7d2fe;
+}
+
+:root.dark .tr-recorder-msg {
+  color: #9ca3af;
+}
+
+/* 警告色在深色底上要**更亮**：`#b45309` 在 `#10131c` 上几乎看不见，
+ * 而这一行正是"为什么这个键不能用"的唯一解释。 */
+:root.dark .tr-recorder-msg-warn {
+  color: #fcd34d;
 }
 
 :root.dark .tr-note code {
