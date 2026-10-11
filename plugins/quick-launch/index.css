@@ -5,16 +5,48 @@
  * 它写的 `class="bg-white"` 不在宿主那次扫描里，因此不会生成对应规则 ——
  * 看起来「有时能用」只是因为那个类名恰好被宿主自己用到了。
  *
- * 配色与宿主一致：强调色复用宿主的 `--accent-*` 变量，深浅两套各自声明。
- * 深色模式由宿主在 `:root` 上加 `.dark` 类切换。
+ * 配色与宿主一致：强调色复用宿主的 `--accent-*` 变量，并且**每一条颜色规则都在
+ * 下面 `:root.dark` 一节里有对应项**。深色模式由宿主在 `:root` 上加 `.dark` 类切换，
+ * 因此这里**不使用 `prefers-color-scheme`** —— 那是操作系统的主题，而用户在应用里
+ * 切的是宿主的，两者可以不一致。
+ *
+ * 目标观感是「原生工具」而不是「示例插件」：克制的反馈、清楚的层级、不喧哗的
+ * 选中态。过渡只加在 hover / 边框 / 阴影 / 背景上，**布局属性一律不加动画**
+ * （给 padding、width、height 做过渡会让列表在切换视图时一格一格地抖）。
  */
 
 .ql-root {
   position: relative;
-  padding: 22px 26px 40px;
-  max-width: 900px;
+  padding: 20px 24px 40px;
+  max-width: 1040px;
   margin: 0 auto;
   min-height: 100%;
+
+  /* ============================================================
+     为什么这里要禁掉文本选中
+     ============================================================
+     拖选卡片时出现一片蓝色高亮，是网页的行为，不是原生工具的行为 ——
+     用户按下鼠标只是想"选一个"，结果得到了一次文本选择，还可能顺手把
+     名称拖出去（`-webkit-user-drag`）。
+     但**输入框与文本框必须能选**：名称、参数、备注、导入用的 JSON 都要能
+     全选复制、要能用鼠标定位光标。因此这里在容器上禁掉，再在
+     `.ql-input` / `.ql-textarea` 上单独恢复 `text`（见下）。
+     反过来写（默认能选、只给卡片禁掉）不行：卡片内部有几层节点，
+     漏掉任何一层都会重新出现蓝色高亮。 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ql-root * {
+  -webkit-user-drag: none;
+}
+
+/* 输入控件恢复可选中：见 `.ql-root` 里那段说明。 */
+.ql-root input,
+.ql-root textarea,
+.ql-root select {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* ============================================================
@@ -24,21 +56,82 @@
 .ql-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
-.ql-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+/* 搜索框：左侧图标 + 输入 + 清除按钮 */
+.ql-search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+}
+
+.ql-search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 13px;
+  line-height: 1;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.ql-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 26px 7px 28px;
+  font-size: 13px;
+  font-family: inherit;
   color: #111827;
-  flex: 1 1 auto;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  /* `type="search"` 在 WebView 里会带一个原生的清除按钮，它的尺寸无法控制，
+     与下面那个自绘的 × 会重叠。 */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.ql-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.ql-search-input:focus {
+  background: #ffffff;
+  border-color: var(--accent-400);
+  box-shadow: 0 0 0 3px var(--accent-50);
+}
+
+/* 占位文字在深色下要跟着变，否则它会是一段接近背景色的灰。 */
+.ql-search-input::placeholder {
+  color: #9ca3af;
+}
+
+.ql-search-clear {
+  position: absolute;
+  right: 6px;
+  padding: 0 5px;
+  font-size: 15px;
+  line-height: 1;
+  color: #9ca3af;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.ql-search-clear:hover {
+  color: #4b5563;
 }
 
 /* 分段控件：视图切换 */
 .ql-segmented {
   display: inline-flex;
+  flex: 0 0 auto;
   padding: 2px;
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
@@ -74,6 +167,7 @@
   flex: 0 0 auto;
   padding: 7px 14px;
   font-size: 13px;
+  font-family: inherit;
   border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
@@ -82,11 +176,11 @@
 
 .ql-btn-primary {
   color: #ffffff;
-  background: var(--accent-500);
+  background: var(--accent-500, #3b82f6);
 }
 
 .ql-btn-primary:hover {
-  background: var(--accent-600);
+  background: var(--accent-600, #2563eb);
 }
 
 .ql-btn-ghost {
@@ -99,6 +193,33 @@
   background: #f9fafb;
 }
 
+.ql-btn-danger {
+  color: #ffffff;
+  background: #dc2626;
+}
+
+.ql-btn-danger:hover {
+  background: #b91c1c;
+}
+
+/* 两步确认的"已就绪"状态：按钮变红并轻微抬起，明确区别于没上膛的那一次点击。 */
+.ql-btn-danger-armed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.ql-btn-danger-armed:hover {
+  background: #fee2e2;
+}
+
+.ql-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ============================================================
    分组筛选
    ============================================================ */
@@ -107,7 +228,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .ql-chip {
@@ -116,6 +237,7 @@
   gap: 6px;
   padding: 5px 10px;
   font-size: 12px;
+  font-family: inherit;
   color: #4b5563;
   background: transparent;
   border: 1px solid #e5e7eb;
@@ -129,14 +251,15 @@
 }
 
 .ql-chip-active {
-  color: var(--accent-700);
-  background: var(--accent-50);
-  border-color: var(--accent-200);
+  color: var(--accent-700, #1d4ed8);
+  background: var(--accent-50, #eff6ff);
+  border-color: var(--accent-200, #bfdbfe);
 }
 
 .ql-chip-count {
   font-size: 11px;
   opacity: 0.6;
+  font-variant-numeric: tabular-nums;
 }
 
 .ql-chip-add {
@@ -145,30 +268,142 @@
 }
 
 /* ============================================================
-   卡片列表
+   分组区与三档视图
    ============================================================ */
+
+.ql-sections {
+  display: block;
+}
+
+.ql-section + .ql-section {
+  margin-top: 18px;
+}
+
+/* 分组的标题条在长列表里要一直看得见 —— 它是"我现在在哪个分组里"的唯一线索。
+   宿主的内容区滚动容器在插件之外，因此这里用 `sticky` 让它贴着内容区顶端。 */
+.ql-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  background: #ffffff;
+  margin-bottom: 6px;
+}
+
+.ql-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  color: #4b5563;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ql-section-toggle:hover {
+  background: #f3f4f6;
+}
+
+.ql-section-chevron {
+  width: 12px;
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.ql-section-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.ql-section-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+}
+
+.ql-section-menu {
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1;
+  color: #9ca3af;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.ql-section-head:hover .ql-section-menu,
+.ql-section-menu:focus-visible {
+  opacity: 1;
+}
+
+.ql-section-menu:hover {
+  background: #f3f4f6;
+  color: #4b5563;
+}
 
 .ql-grid {
   display: grid;
   gap: 10px;
 }
 
-/* 网格：图标在上、文字在下 */
-.ql-view-grid {
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+/* 网格：大图标在上、文字在下 */
+.ql-view-grid .ql-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 }
 
-/* 列表：图标在左、文字在右，一行一个 */
-.ql-view-list {
+/* 列表：一行一条，图标在左、名称与副标题在右 */
+.ql-view-list .ql-grid {
   grid-template-columns: 1fr;
   gap: 4px;
 }
 
-/* 紧凑：小图标 + 只显示名称 */
-.ql-view-compact {
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+/* 紧凑：更密的行、更小的图标、没有副标题（名称仍然是主体） */
+.ql-view-compact .ql-grid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 3px;
+}
+
+.ql-density-tight.ql-view-grid .ql-grid {
   gap: 6px;
 }
+
+.ql-density-tight.ql-view-list .ql-grid,
+.ql-density-tight.ql-view-compact .ql-grid {
+  gap: 2px;
+}
+
+/* 「宽松」显式写一遍，虽然它就是上面那些默认值：`.ql-density-<值>` 这个形状
+   由 JS 拼出来，三档视图与两档密度都应该能在样式表里找到自己的那一条 ——
+   将来给 `cozy` 单独调间距时才有地方可改，而不必去猜"它凭什么没有规则"。 */
+.ql-density-cozy.ql-view-grid .ql-grid {
+  gap: 10px;
+}
+
+.ql-density-cozy.ql-view-list .ql-grid {
+  gap: 4px;
+}
+
+.ql-density-cozy.ql-view-compact .ql-grid {
+  gap: 3px;
+}
+
+/* ============================================================
+   卡片
+   ============================================================ */
 
 .ql-card {
   position: relative;
@@ -177,7 +412,7 @@
   border: 1px solid transparent;
   border-radius: 12px;
   cursor: default;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .ql-view-grid .ql-card {
@@ -199,7 +434,16 @@
   flex-direction: row;
   align-items: center;
   gap: 7px;
-  padding: 6px 8px;
+  padding: 5px 8px;
+}
+
+.ql-density-tight.ql-view-grid .ql-card {
+  padding: 10px 8px;
+  gap: 6px;
+}
+
+.ql-density-tight.ql-view-list .ql-card {
+  padding: 4px 8px;
 }
 
 .ql-card:hover {
@@ -208,8 +452,94 @@
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
 }
 
-.ql-view-grid .ql-card:hover {
-  transform: translateY(-2px);
+/* 键盘选中态与悬浮态要能分开看：一个是从键盘来的（`:focus-visible`），
+   一个是从鼠标来的。两者都给反馈，但都不夸张 —— 这是"专业"与"花哨"的分界。 */
+.ql-card:focus-visible {
+  outline: none;
+  border-color: var(--accent-400, #60a5fa);
+  box-shadow: 0 0 0 3px var(--accent-50, #eff6ff);
+}
+
+.ql-card-focused {
+  border-color: var(--accent-300, #93c5fd);
+}
+
+/* 固定项：左侧一道强调色竖条 + 右上角的星。两个信号都是"克制"的。 */
+.ql-card-pinned {
+  background: var(--accent-50, #eff6ff);
+}
+
+.ql-card-pinned::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-400, #60a5fa);
+}
+
+.ql-card-pin {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--accent-500, #3b82f6);
+}
+
+.ql-view-list .ql-card-pin,
+.ql-view-compact .ql-card-pin {
+  position: static;
+  flex: 0 0 auto;
+  order: 3;
+}
+
+/* 「打不开」标记。它是**持久的**（存进状态里），因此视觉上要像一个状态标签，
+   而不是一次性的错误提示 —— 失败原因在悬浮提示与编辑对话框里看得到。 */
+.ql-card-broken {
+  border-color: #fecaca;
+}
+
+.ql-card-broken-mark {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  background: #dc2626;
+  border-radius: 50%;
+}
+
+.ql-view-list .ql-card-broken-mark,
+.ql-view-compact .ql-card-broken-mark {
+  position: static;
+  flex: 0 0 auto;
+}
+
+/* 固定 + 打不开同时出现时两个角标会叠在一起，把星挪到左上角。 */
+.ql-card-pinned.ql-card-broken .ql-card-pin {
+  right: auto;
+  left: 7px;
+}
+
+.ql-view-list .ql-card-pinned.ql-card-broken .ql-card-pin,
+.ql-view-compact .ql-card-pinned.ql-card-broken .ql-card-pin {
+  left: auto;
+}
+
+/* 短暂高亮：拖入的重复项、刚添加成功的那一条。 */
+.ql-card-flash {
+  border-color: var(--accent-400, #60a5fa);
+  background: var(--accent-50, #eff6ff);
 }
 
 .ql-card-icon {
@@ -221,9 +551,24 @@
   border-radius: 9px;
 }
 
-.ql-view-grid .ql-card-icon {
-  width: 48px;
-  height: 48px;
+.ql-icon-small {
+  width: 20px;
+  height: 20px;
+}
+
+.ql-icon-medium {
+  width: 28px;
+  height: 28px;
+}
+
+.ql-icon-large {
+  width: 44px;
+  height: 44px;
+}
+
+.ql-view-grid .ql-icon-large {
+  width: 52px;
+  height: 52px;
 }
 
 .ql-view-list .ql-card-icon {
@@ -231,9 +576,14 @@
   height: 28px;
 }
 
+.ql-view-list .ql-icon-large {
+  width: 36px;
+  height: 36px;
+}
+
 .ql-view-compact .ql-card-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .ql-card-icon img {
@@ -242,23 +592,36 @@
   object-fit: contain;
 }
 
-/* 图标还没提取出来（或提取失败）时的占位：用名称首字母，避免一片空白 */
+/* 图标还没提取出来（或提取失败）时的占位：用名称或域名的前两个字。
+   网址条目**总是**走这里 —— 抓 favicon 需要 network 权限，本插件不申请。 */
 .ql-card-icon-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   height: 100%;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--accent-700);
-  background: var(--accent-50);
+  letter-spacing: 0.02em;
+  color: var(--accent-700, #1d4ed8);
+  background: var(--accent-50, #eff6ff);
   border-radius: 9px;
 }
 
+.ql-icon-small .ql-card-icon-fallback,
 .ql-view-compact .ql-card-icon-fallback {
   font-size: 9px;
   border-radius: 5px;
+}
+
+.ql-icon-large .ql-card-icon-fallback {
+  font-size: 16px;
+}
+
+/* 网址瓦片：与程序图标在形状上明确区分（圆角更大、带一圈描边）。 */
+.ql-card-icon-tile .ql-card-icon-fallback {
+  border-radius: 999px;
+  border: 1px solid var(--accent-200, #bfdbfe);
 }
 
 .ql-card-text {
@@ -289,35 +652,31 @@
   text-overflow: ellipsis;
 }
 
-.ql-view-compact .ql-card-name {
-  font-size: 12px;
+/* 副标题只在列表视图里出现：那里横向空间够，也不挤主视觉。 */
+.ql-card-sub {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 有备注的条目给一个小圆点，否则用户不知道悬浮会有东西 */
-.ql-card-note-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-400);
-}
-
-.ql-view-list .ql-card-note-dot,
-.ql-view-compact .ql-card-note-dot {
-  position: static;
-  flex: 0 0 auto;
+/* 关掉名称之后，图标仍在（它是识别的主要线索）。紧凑视图里本来就没有副标题。 */
+.ql-nolabels .ql-card-name,
+.ql-nolabels .ql-card-sub {
+  display: none;
 }
 
 /* ============================================================
-   备注悬浮提示
+   悬浮提示（备注 + 使用统计）
    ============================================================ */
 
 .ql-tooltip {
   position: fixed;
   z-index: 60;
-  max-width: 280px;
+  max-width: 300px;
   padding: 7px 10px;
   font-size: 12px;
   line-height: 1.6;
@@ -325,8 +684,6 @@
   background: rgba(17, 24, 39, 0.95);
   border-radius: 8px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  white-space: pre-wrap;
-  word-break: break-word;
   pointer-events: none;
   /* 锚在卡片上边中点，向上展开 */
   transform: translate(-50%, calc(-100% - 8px));
@@ -335,6 +692,18 @@
 /* 卡片贴近内容区顶部时改为向下展开（见 index.js 的 placeBelow） */
 .ql-tooltip-below {
   transform: translate(-50%, 8px);
+}
+
+.ql-tooltip-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 使用统计比备注低一档：它是补充信息，不该和备注抢注意力。 */
+.ql-tooltip-stats {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #9ca3af;
 }
 
 /* ============================================================
@@ -350,9 +719,47 @@
   border-radius: 12px;
 }
 
+/* 一条条目都没有时的引导态。它要回答三个问题：这是什么、我该怎么做、
+   能做到什么程度 —— 而不是一句"还没有分组"。 */
+.ql-empty-rich {
+  padding: 32px 28px;
+  text-align: left;
+}
+
+.ql-empty-icon {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--accent-400, #60a5fa);
+}
+
+.ql-empty-title {
+  margin: 10px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ql-empty-list {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  font-size: 12.5px;
+  line-height: 1.9;
+}
+
+.ql-empty-list li {
+  margin-bottom: 2px;
+}
+
+.ql-empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 /* 用 outline 而不是 border：拖入时出现/消失不会引起布局跳动 */
 .ql-dropping {
-  outline: 2px dashed var(--accent-400);
+  outline: 2px dashed var(--accent-400, #60a5fa);
   outline-offset: -8px;
   border-radius: 12px;
 }
@@ -364,9 +771,9 @@
   transform: translateX(-50%);
   padding: 6px 14px;
   font-size: 12px;
-  color: var(--accent-700);
-  background: var(--accent-50);
-  border: 1px solid var(--accent-200);
+  color: var(--accent-700, #1d4ed8);
+  background: var(--accent-50, #eff6ff);
+  border: 1px solid var(--accent-200, #bfdbfe);
   border-radius: 999px;
   pointer-events: none;
 }
@@ -378,7 +785,9 @@
 .ql-menu {
   position: fixed;
   z-index: 70;
-  min-width: 168px;
+  min-width: 188px;
+  max-height: 70vh;
+  overflow-y: auto;
   padding: 4px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
@@ -391,14 +800,17 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+  box-sizing: border-box;
   padding: 6px 10px;
   font-size: 13px;
+  font-family: inherit;
   color: #374151;
   text-align: left;
   background: transparent;
   border: none;
   border-radius: 7px;
   cursor: pointer;
+  transition: background 0.12s;
 }
 
 .ql-menu-item:hover {
@@ -413,14 +825,34 @@
   background: #fef2f2;
 }
 
+/* 当前生效的那一项（视图 / 排序 / 分组）。右侧的 ✓ 是主要信号，这里只补一层
+   很淡的底，让它在长菜单里更容易被扫到。 */
+.ql-menu-item-checked {
+  background: #f9fafb;
+}
+
+/* 两步确认按钮也带 `ql-menu-item`，这是它"上膛"后的样子。 */
+.ql-menu-item.ql-btn-danger-armed {
+  color: #b91c1c;
+  background: #fee2e2;
+  border: none;
+}
+
 .ql-menu-label {
   flex: 1 1 auto;
+}
+
+/* 菜单项右侧的短说明，例如"已启动 12 次"。 */
+.ql-menu-hint {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #9ca3af;
 }
 
 .ql-menu-mark {
   flex: 0 0 auto;
   font-size: 11px;
-  color: var(--accent-600);
+  color: var(--accent-600, #2563eb);
 }
 
 .ql-menu-sep {
@@ -435,8 +867,17 @@
   color: #9ca3af;
 }
 
+/* 自定义节点（两步确认按钮）的包装：它自己就是那个按钮，这里不加任何样式。 */
+.ql-menu-slot {
+  display: block;
+}
+
+.ql-menu-slot > .ql-menu-item {
+  margin: 0;
+}
+
 /* ============================================================
-   编辑对话框
+   对话框
    ============================================================ */
 
 /* 覆盖层：`inset: 0` 只是**回退值**。
@@ -458,7 +899,7 @@
 
 .ql-dialog {
   width: 100%;
-  max-width: 460px;
+  max-width: 480px;
   max-height: 100%;
   overflow-y: auto;
   padding: 20px;
@@ -467,11 +908,22 @@
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.28);
 }
 
+.ql-dialog-small {
+  max-width: 360px;
+}
+
 .ql-dialog-title {
   margin: 0 0 14px;
   font-size: 15px;
   font-weight: 600;
   color: #111827;
+}
+
+.ql-dialog-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
 }
 
 .ql-field {
@@ -512,7 +964,11 @@
 
 .ql-input:focus {
   background: #ffffff;
-  border-color: var(--accent-400);
+  border-color: var(--accent-400, #60a5fa);
+}
+
+.ql-input::placeholder {
+  color: #9ca3af;
 }
 
 .ql-input-mono {
@@ -523,6 +979,40 @@
 .ql-textarea {
   resize: vertical;
   line-height: 1.6;
+}
+
+/* 「已自动补全为 https://…」—— 补全的结果必须看得见，因此它是一条常驻说明
+   而不是一闪而过的提示。 */
+.ql-note {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--accent-700, #1d4ed8);
+  background: var(--accent-50, #eff6ff);
+  border: 1px solid var(--accent-200, #bfdbfe);
+  border-radius: 9px;
+  word-break: break-all;
+}
+
+.ql-mode {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ql-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.ql-mode-option input {
+  flex: 0 0 auto;
 }
 
 .ql-dialog-actions {
@@ -577,11 +1067,29 @@
 
 /* ============================================================
    深色模式
-   ============================================================ */
+   ============================================================
+   宿主在 `:root` 上加 `.dark`。上面**每一条**颜色规则都在这里有一条对应项；
+   新增颜色时忘了补对应项，症状就是深色下有一块刺眼的白或者一片看不清的灰。 */
 
-:root.dark .ql-title,
-:root.dark .ql-dialog-title {
+:root.dark .ql-search-input {
   color: #e5e7eb;
+  background: #0e111a;
+  border-color: #2c3242;
+}
+
+:root.dark .ql-search-input:focus {
+  background: #0e111a;
+  border-color: var(--accent-400, #60a5fa);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+}
+
+:root.dark .ql-search-icon,
+:root.dark .ql-search-clear {
+  color: #6b7280;
+}
+
+:root.dark .ql-search-clear:hover {
+  color: #cbd5e1;
 }
 
 :root.dark .ql-segmented {
@@ -612,6 +1120,25 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+:root.dark .ql-btn-danger {
+  color: #ffffff;
+  background: #b91c1c;
+}
+
+:root.dark .ql-btn-danger:hover {
+  background: #dc2626;
+}
+
+:root.dark .ql-btn-danger-armed {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.25);
+  border-color: #7f1d1d;
+}
+
+:root.dark .ql-btn-danger-armed:hover {
+  background: rgba(127, 29, 29, 0.4);
+}
+
 :root.dark .ql-chip {
   color: #9ca3af;
   border-color: #2c3242;
@@ -622,9 +1149,35 @@
 }
 
 :root.dark .ql-chip-active {
-  color: var(--accent-300);
+  color: var(--accent-300, #93c5fd);
   background: rgba(255, 255, 255, 0.06);
   border-color: #3a4257;
+}
+
+:root.dark .ql-section-head {
+  background: #151823;
+}
+
+:root.dark .ql-section-toggle {
+  color: #cbd5e1;
+}
+
+:root.dark .ql-section-toggle:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+:root.dark .ql-section-chevron,
+:root.dark .ql-section-count {
+  color: #6b7280;
+}
+
+:root.dark .ql-section-menu {
+  color: #6b7280;
+}
+
+:root.dark .ql-section-menu:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #cbd5e1;
 }
 
 :root.dark .ql-card:hover {
@@ -633,18 +1186,75 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+:root.dark .ql-card:focus-visible {
+  border-color: var(--accent-400, #60a5fa);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+}
+
+:root.dark .ql-card-focused {
+  border-color: var(--accent-400, #60a5fa);
+}
+
+:root.dark .ql-card-pinned {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:root.dark .ql-card-pin {
+  color: var(--accent-300, #93c5fd);
+}
+
+:root.dark .ql-card-broken {
+  border-color: #7f1d1d;
+}
+
+:root.dark .ql-card-broken-mark {
+  color: #450a0a;
+  background: #fca5a5;
+}
+
+:root.dark .ql-card-flash {
+  border-color: var(--accent-400, #60a5fa);
+  background: rgba(96, 165, 250, 0.12);
+}
+
 :root.dark .ql-card-name {
   color: #e5e7eb;
 }
 
+:root.dark .ql-card-sub {
+  color: #6b7280;
+}
+
 :root.dark .ql-card-icon-fallback {
-  color: var(--accent-300);
+  color: var(--accent-300, #93c5fd);
   background: rgba(255, 255, 255, 0.07);
+}
+
+:root.dark .ql-card-icon-tile .ql-card-icon-fallback {
+  border-color: #3a4257;
+}
+
+:root.dark .ql-tooltip {
+  color: #f3f4f6;
+  background: rgba(2, 6, 23, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+:root.dark .ql-tooltip-stats {
+  color: #9ca3af;
 }
 
 :root.dark .ql-empty {
   color: #6b7280;
   border-color: #2c3242;
+}
+
+:root.dark .ql-empty-icon {
+  color: var(--accent-400, #60a5fa);
+}
+
+:root.dark .ql-empty-title {
+  color: #e5e7eb;
 }
 
 :root.dark .ql-menu {
@@ -669,6 +1279,23 @@
   background: rgba(127, 29, 29, 0.25);
 }
 
+:root.dark .ql-menu-item-checked {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:root.dark .ql-menu-item.ql-btn-danger-armed {
+  color: #fca5a5;
+  background: rgba(127, 29, 29, 0.35);
+}
+
+:root.dark .ql-menu-hint {
+  color: #6b7280;
+}
+
+:root.dark .ql-menu-mark {
+  color: var(--accent-300, #93c5fd);
+}
+
 :root.dark .ql-menu-sep {
   background: #2c3242;
 }
@@ -679,6 +1306,14 @@
 
 :root.dark .ql-dialog {
   background: #151823;
+}
+
+:root.dark .ql-dialog-title {
+  color: #e5e7eb;
+}
+
+:root.dark .ql-dialog-hint {
+  color: #9ca3af;
 }
 
 :root.dark .ql-field-label {
@@ -695,12 +1330,18 @@
   border-color: #2c3242;
 }
 
-:root.dark .ql-input::placeholder {
-  color: #6b7280;
+:root.dark .ql-input:focus {
+  border-color: var(--accent-400, #60a5fa);
 }
 
-:root.dark .ql-input:focus {
-  border-color: var(--accent-400);
+:root.dark .ql-note {
+  color: var(--accent-300, #93c5fd);
+  background: rgba(96, 165, 250, 0.12);
+  border-color: #3a4257;
+}
+
+:root.dark .ql-mode-option {
+  color: #9ca3af;
 }
 
 :root.dark .ql-error {
@@ -710,7 +1351,68 @@
 }
 
 :root.dark .ql-dropHint {
-  color: var(--accent-300);
+  color: var(--accent-300, #93c5fd);
   background: rgba(255, 255, 255, 0.06);
   border-color: #2c3242;
+}
+
+/* ---- 上面那些"浅色下用的是透明边框 / 半透明底"的规则，在深色下各自对应 ---- */
+
+:root.dark .ql-root {
+  color: #e5e7eb;
+}
+
+:root.dark .ql-btn {
+  color: inherit;
+}
+
+:root.dark .ql-btn-primary {
+  color: #ffffff;
+  background: var(--accent-500, #3b82f6);
+}
+
+:root.dark .ql-btn-primary:hover {
+  background: var(--accent-600, #2563eb);
+}
+
+:root.dark .ql-chip-add {
+  color: #6b7280;
+  border-color: #2c3242;
+}
+
+:root.dark .ql-section-name {
+  color: inherit;
+}
+
+:root.dark .ql-card {
+  border-color: transparent;
+}
+
+:root.dark .ql-card-pinned::before {
+  background: var(--accent-400, #60a5fa);
+}
+
+:root.dark .ql-dropping {
+  outline-color: var(--accent-400, #60a5fa);
+}
+
+:root.dark .ql-overlay {
+  background: rgba(2, 6, 23, 0.55);
+}
+
+:root.dark .ql-error-close {
+  color: inherit;
+}
+
+:root.dark .ql-search-input::placeholder {
+  color: #6b7280;
+}
+
+:root.dark .ql-input::placeholder {
+  color: #6b7280;
+}
+
+:root.dark .ql-nolabels .ql-card-name,
+:root.dark .ql-nolabels .ql-card-sub {
+  color: #e5e7eb;
 }
