@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.translate",
   "displayName": "划词翻译",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "在别的程序里选中一段文字，按一下热键就出译文。译文由你自己跑在本机的 OpenAI 兼容模型服务（llama.cpp 的 server 一类）生成，选中的文字与译文都不离开这台机器。",
   "author": {
     "name": "环理论",
@@ -38,6 +38,7 @@
   "icon": "icon.svg",
   "permissions": [
     "storage",
+    "plugin-data",
     "network",
     "notification",
     "clipboard",
@@ -96,6 +97,28 @@
         "default": "Ctrl+Q"
       },
       {
+        "id": "sourceLang",
+        "label": "源语言",
+        "description": "会替换提示词模板里的 {source}。缺省是「自动」—— 本插件不做语言检测（那需要另一个模型），自动时 {source} 被替换成一句让模型自己判断的话，而不是随便猜一个语言名。",
+        "type": "select",
+        "default": "auto",
+        "options": [
+          { "value": "auto", "label": "自动（由模型判断）" },
+          { "value": "简体中文", "label": "简体中文" },
+          { "value": "繁體中文", "label": "繁體中文" },
+          { "value": "English", "label": "English" },
+          { "value": "日本語", "label": "日本語" },
+          { "value": "한국어", "label": "한국어" },
+          { "value": "Русский", "label": "Русский" },
+          { "value": "Français", "label": "Français" },
+          { "value": "Deutsch", "label": "Deutsch" },
+          { "value": "Español", "label": "Español" },
+          { "value": "Italiano", "label": "Italiano" },
+          { "value": "Português", "label": "Português" },
+          { "value": "العربية", "label": "العربية" }
+        ]
+      },
+      {
         "id": "targetLang",
         "label": "目标语言",
         "description": "译文的目标语言，会替换提示词模板里的 {target}。",
@@ -110,7 +133,10 @@
           { "value": "Русский", "label": "Русский" },
           { "value": "Français", "label": "Français" },
           { "value": "Deutsch", "label": "Deutsch" },
-          { "value": "Español", "label": "Español" }
+          { "value": "Español", "label": "Español" },
+          { "value": "Italiano", "label": "Italiano" },
+          { "value": "Português", "label": "Português" },
+          { "value": "العربية", "label": "العربية" }
         ]
       }
     ],

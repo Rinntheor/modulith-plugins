@@ -1,7 +1,10 @@
 /* plugins/translate/index.css
  *
- * 单列布局：标题 + 状态行在最上面，中间是手动翻译与结果，下面是模型、设置、
- * 密钥、历史。整页一起滚动。
+ * 单列布局：标题在最上面，然后是**翻译工作台**（原文、语言、译文），接着是
+ * 历史、统计、模型与端点，最后是收起来的划词热键那一节。整页一起滚动。
+ *
+ * 主次是刻意的：工作台与历史是一个翻译工具的正文，热键是它的一条可选入口 ——
+ * 因此热键那一节默认收起，而工作台是页面上下来的第一块内容。
  *
  * 根元素用 `position: absolute; inset: 0` 铺满**模块可见区域**（宿主每个标签的
  * 滚动容器就是最近的定位祖先），内部再用一个 `overflow-y: auto` 的容器滚动 ——
@@ -565,6 +568,157 @@
 }
 
 /* ============================================================
+   翻译工作台（主视图）
+   ============================================================ */
+
+/* 工作台用更亮的一档边框与一层很浅的阴影把它从"配置卡片"里挑出来 —— 它是这一屏
+ * 上用户真正要用的东西。与 `.tr-card-result` 同一个取向，但那个是"结果"，这个是
+ * "输入"。 */
+.tr-card-workspace {
+  gap: 10px;
+  border-color: var(--accent-300, #a5b4fc);
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.08);
+}
+
+.tr-btn-lg {
+  padding: 8px 22px;
+  font-size: 13px;
+}
+
+.tr-row-lang {
+  gap: 10px;
+}
+
+.tr-lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tr-lang-label {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.tr-select-sm {
+  min-width: 140px;
+  padding: 5px 8px;
+}
+
+.tr-arrow {
+  color: #9ca3af;
+}
+
+/* 工作台里的结果与"翻译"按钮在同一张卡片里 —— 翻完不必往下滚去找它。 */
+.tr-workspace-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+/* ============================================================
+   统计
+   ============================================================ */
+
+.tr-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tr-stat {
+  flex: 1 1 120px;
+  min-width: 110px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+.tr-stat-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.tr-stat-label {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #9ca3af;
+}
+
+/* ============================================================
+   热键那一节
+   ============================================================ */
+
+/* 展开区与"状态行"之间留一点距离：状态行在收起时也要显示（它回答的是"这一节
+ * 能不能用"），而展开之后它是下面那些控件的上下文。 */
+.tr-hotkey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #eef0f3;
+}
+
+.tr-sub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+.tr-sub-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* ============================================================
+   历史条目上的动作与展开
+   ============================================================ */
+
+.tr-history-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* 打开的那一条：全文贴在下方的框里，与预览区分开（预览是灰色的两行，这里是
+ * 完整正文）。 */
+.tr-open {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+}
+
+.tr-history-foot {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tr-tag-pin {
+  color: var(--accent-700, #4338ca);
+  background: var(--accent-50, #eef2ff);
+  border-color: var(--accent-200, #c7d2fe);
+}
+
+/* ============================================================
    深色模式
    ============================================================
    宿主在插件文档自己的 `:root` 上挂 `.dark`，因此这里不需要（也不该）读
@@ -717,4 +871,42 @@
 
 :root.dark .tr-status-error {
   color: #fca5a5;
+}
+
+/* 工作台、统计格、热的展开区、打开的那一条 —— 浅色底一律翻成比卡片更深一档。 */
+:root.dark .tr-card-workspace {
+  border-color: var(--accent-800, #3730a3);
+  box-shadow: none;
+}
+
+:root.dark .tr-workspace-result,
+:root.dark .tr-stat,
+:root.dark .tr-sub-card {
+  background: #10131c;
+  border-color: #232838;
+}
+
+:root.dark .tr-stat-value,
+:root.dark .tr-sub-title {
+  color: #e5e7eb;
+}
+
+:root.dark .tr-stat-label,
+:root.dark .tr-lang-label {
+  color: #6b7280;
+}
+
+:root.dark .tr-hotkey-body {
+  border-top-color: #232838;
+}
+
+:root.dark .tr-open {
+  background: #151823;
+  border-color: #3a4257;
+}
+
+:root.dark .tr-tag-pin {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border-color: var(--accent-700, #4338ca);
 }

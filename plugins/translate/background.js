@@ -104,8 +104,21 @@
   var DEFAULT_BASE_URL = 'http://127.0.0.1:5566/v1';
   var DEFAULT_ENDPOINT_KIND = 'chat';
   var DEFAULT_MODEL = 'Hy MT2 1.8B Q4_K_M.gguf';
+  var DEFAULT_SOURCE_LANG = 'auto';
   var DEFAULT_TARGET_LANG = '简体中文';
   var DEFAULT_TRIGGER_COMBO = 'Ctrl+Q';
+
+  /**
+   * 「自动」源语言替换成的那句话。
+   *
+   * **必须与 `index.js` 里的那一份逐字相同**：热键翻出来的与面板里翻出来的如果
+   * 提示词不一样，同一个人会看到两种译文风格，而那种差异没有任何线索指向"两个
+   * 文件里各写了一句"。
+   *
+   * 它是一句**说明**而不是一个语言名：这个插件不做语言检测（那需要另一个模型），
+   * 把"自动"谎报成某个具体语言只会误导模型与用户。
+   */
+  var SOURCE_AUTO_HINT = '原文的语言（由你判断）';
 
   /**
    * 默认提示词模板。
@@ -274,6 +287,7 @@
       model: typeof source.model === 'string' ? source.model.trim() : DEFAULT_MODEL,
       promptTemplate: textOr(source.promptTemplate, DEFAULT_PROMPT_TEMPLATE),
       triggerCombo: textOr(source.triggerCombo, DEFAULT_TRIGGER_COMBO),
+      sourceLang: textOr(source.sourceLang, DEFAULT_SOURCE_LANG),
       targetLang: textOr(source.targetLang, DEFAULT_TARGET_LANG),
     };
   }
@@ -622,6 +636,8 @@
    *
    * `{source}` 在自动模式下替换成一句说明而不是猜一个语言名：这个插件**不做语言
    * 检测**（那需要另一个模型），把"自动"谎报成某个具体语言只会误导模型和用户。
+   * 设置里的 `sourceLang` 由面板与宿主设置页写入，后台**每次触发都重读一遍**
+   * （见文件头），因此改了源语言的效果是"下一次触发就生效"。
    */
   function buildPrompt(config, text) {
     var template = config.promptTemplate;
@@ -635,7 +651,7 @@
       .split('{target}')
       .join(config.targetLang)
       .split('{source}')
-      .join('原文的语言（由你判断）')
+      .join(config.sourceLang === 'auto' || !config.sourceLang ? SOURCE_AUTO_HINT : config.sourceLang)
       .split('{text}')
       .join(text);
   }
@@ -1015,6 +1031,7 @@
           endpoint: config.baseUrl,
           endpointKind: config.endpointKind,
           model: config.model,
+          sourceLang: config.sourceLang,
           targetLang: config.targetLang,
           secretsAvailable: !!(ctx.secrets && ctx.secrets.isAvailable && ctx.secrets.isAvailable()),
           settingsAvailable: !!(ctx.settings && ctx.settings.isAvailable && ctx.settings.isAvailable()),
