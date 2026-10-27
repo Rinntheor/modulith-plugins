@@ -1,0 +1,59 @@
+{
+  "name": "com.rinntheor.modulith.prob-lab",
+  "displayName": "概率实验室",
+  "version": "1.0.0",
+  "description": "用可复现的随机试验核对直觉：命中率如何收敛到设定概率、单次抽签的运气有多离谱，以及精确的二项分布算给你看。",
+  "author": {
+    "name": "环理论",
+    "url": "https://github.com/Rinntheor"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Rinntheor/modulith-plugins/tree/main/plugins/prob-lab",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rinntheor/modulith-plugins.git"
+  },
+  "categories": [
+    "开发",
+    "效率"
+  ],
+  "keywords": [
+    "probability",
+    "random",
+    "simulation",
+    "statistics",
+    "binomial",
+    "confidence",
+    "seed",
+    "概率",
+    "随机",
+    "模拟",
+    "统计",
+    "二项分布"
+  ],
+  "engines": {
+    "modulith": ">=1.6.0"
+  },
+  "runtime": "sandboxed",
+  "main": "index.js",
+  "style": "index.css",
+  "icon": "icon.svg",
+  "permissions": [
+    "storage"
+  ],
+  "contributes": {
+    "modules": [
+      {
+        "id": "probLab",
+        "name": "概率实验室",
+        "displayName": "概率实验室",
+        "description": "随机试验模拟、单发运气分析、二项分布计算",
+        "icon": "icon.svg",
+        "priority": 88
+      }
+    ]
+  },
+  "activationEvents": [
+    "onModule:probLab"
+  ]
+}
