@@ -3211,7 +3211,7 @@
     id: 'quick-launch',
     name: '快捷启动',
     description: '把常用程序与网址收在一处，点一下就打开',
-    icon: 'Rocket',
+    icon: 'icon.svg',
     priority: 80,
     component: QuickLaunch,
   });

@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.stand-up",
   "displayName": "久坐提醒",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "没有界面的插件：它的代码跑在一个独立的 Node 进程里，每 45 分钟提醒你起来动一下，并把累计次数记在插件存储里。演示 contributes.background 这条无界面插件的形态。",
   "author": {
     "name": "环理论",

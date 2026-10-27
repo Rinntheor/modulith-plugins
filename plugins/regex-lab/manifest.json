@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.regex-lab",
   "displayName": "正则实验场",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "边写边看匹配、捕获组与替换结果。算不完的表达式会被自动中断，不会把界面拖死。",
   "author": {
     "name": "环理论",

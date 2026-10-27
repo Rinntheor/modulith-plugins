@@ -61,7 +61,7 @@ Modulith.registerModule({
   name: '影像元数据工坊',
   displayName: '影像元数据工坊',
   description: '查清一张图里到底有什么，抹掉痕迹，打上可追踪的水印，并留下台账',
-  icon: 'Fingerprint',
+  icon: 'icon.svg',
   category: 'plugin',
   // 排在常用工具附近。宿主的模块列表按 priority 升序。
   priority: 58,

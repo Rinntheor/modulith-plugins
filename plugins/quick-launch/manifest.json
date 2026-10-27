@@ -1,7 +1,7 @@
 {
   "name": "com.modulith.sample.quick-launch",
   "displayName": "快捷启动",
-  "version": "1.1.0",
+  "version": "1.1.3",
   "description": "把常用程序、快捷方式与网址收在一处，一下打开。支持分组（可折叠、标题随滚动常驻）、三种视图、搜索、固定与使用统计、单击/双击启动、方向键操作、图标提取、失效条目标记、配置的导入导出，以及把文件直接拖进来添加。",
   "author": {
     "name": "环理论",
@@ -42,7 +42,7 @@
         "id": "quick-launch",
         "name": "快捷启动",
         "description": "把常用程序与网址收在一处，点一下就打开",
-        "icon": "Rocket",
+        "icon": "icon.svg",
         "priority": 80
       }
     ],

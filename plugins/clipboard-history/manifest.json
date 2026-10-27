@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.clipboard-history",
   "displayName": "剪贴板历史",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "留住你复制过的东西：文本按时间倒序列出来，可搜索、可置顶、可删除，点一下就能贴回剪贴板。图片采集默认关闭。",
   "author": {
     "name": "环理论",
@@ -42,7 +42,7 @@
         "id": "clipboard-history",
         "name": "剪贴板历史",
         "description": "留下复制过的东西，随时贴回去",
-        "icon": "ClipboardList",
+        "icon": "icon.svg",
         "priority": 72
       }
     ],
