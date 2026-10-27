@@ -97,7 +97,7 @@
   // 常量
   // ============================================================
   //
-  // 缺省值与清单 `contributes.settings` 里那六项**逐字一致**：设置读不到时
+  // 缺省值与清单 `contributes.settings` 里那八项**逐字一致**：设置读不到时
   // （缺 storage 权限、后端不可用）这里回落到的，就是用户没改过时该拿到的值。
   // 两处不一致的后果是"没声明 storage 权限的机器上表现与别人不同"。
 
@@ -106,6 +106,17 @@
   var DEFAULT_MODEL = 'Hy MT2 1.8B Q4_K_M.gguf';
   var DEFAULT_SOURCE_LANG = 'auto';
   var DEFAULT_TARGET_LANG = '简体中文';
+  /**
+   * 划词翻译的目标语言。
+   *
+   * **它与 `targetLang`（工作台）是两项独立设置。** 让它们共用的后果很具体：
+   * 用户在面板里把工作台改成英文读资料，回到别的程序按热键，译文也变成了英文 ——
+   * 而他想要的恰恰是翻回中文。改回来之后工作台又变回中文，两边互相拉扯。
+   *
+   * 缺省值与 `targetLang` 相同，但**读取时的回落链是「没设置过 → 跟随工作台 →
+   * 缺省值」**，因此升级前只设置过 `targetLang` 的用户不会突然换一种语言。
+   */
+  var DEFAULT_QUICK_TARGET_LANG = '简体中文';
   var DEFAULT_TRIGGER_COMBO = 'Ctrl+Q';
 
   /**
@@ -289,6 +300,12 @@
       triggerCombo: textOr(source.triggerCombo, DEFAULT_TRIGGER_COMBO),
       sourceLang: textOr(source.sourceLang, DEFAULT_SOURCE_LANG),
       targetLang: textOr(source.targetLang, DEFAULT_TARGET_LANG),
+      // 回落链：没设置过 → 跟随工作台那一项 → 缺省值。旧版本只写过 targetLang，
+      // 因此升级之后划词仍然翻成用户原来选的语言（升级不该改变已有行为）。
+      quickTargetLang: textOr(
+        source.quickTargetLang,
+        textOr(source.targetLang, DEFAULT_QUICK_TARGET_LANG)
+      ),
     };
   }
 
@@ -832,7 +849,7 @@
     }
 
     return showCard({
-      title: '译文 → ' + config.targetLang,
+      title: '译文 → ' + config.quickTargetLang,
       body: clipped.text,
       tone: 'success',
       actions: actions,
@@ -933,8 +950,7 @@
             return reportFailure(
               '读不到 API key',
               config.apiKeyError +
-                '\n\n（密钥存在加密的密钥库里，不在设置里。上面那句话说明的是它为什么读不到 —— ' +
-                '最常见的一种是换了机器或网卡，那时旧密文解不开，重新输入一次即可。）'
+                '\n\n密钥存在加密的密钥库里（不在设置里）。换过机器或网卡时旧密文解不开，重新输入一次即可。'
             );
           });
         }
@@ -943,7 +959,7 @@
           return recordOutcome('no-model').then(function () {
             return reportFailure(
               '没有配置模型',
-              '请求体里的 model 字段是空的。到插件面板点一次「同步模型」，从服务端实际加载的模型里挑一个。'
+              '请求体里的 model 字段是空的。到面板的「设置 → 连接」点一次「同步模型」，从服务端实际加载的模型里选一个。'
             );
           });
         }
@@ -958,15 +974,19 @@
                   body:
                     '先在别的程序里选中一段文字，再按 ' +
                     config.triggerCombo +
-                    '。\n\n如果确实选中了还是没有，那个程序可能不支持合成的 Ctrl+C ' +
-                    '（终端、部分游戏、以管理员权限运行的程序都会这样）。面板里可以直接手动翻译。',
+                    '。\n\n有些程序不支持合成的 Ctrl+C（终端、部分游戏、以管理员权限运行的程序），' +
+                    '那时请改用面板手动翻译。',
                   tone: 'warning',
                   timeoutMs: 9000,
                 });
               });
             }
 
-            return requestJson(config, endpointPath(config), buildRequestBody(config, buildPrompt(config, selected)))
+            // 划词这一路用**划词目标语言**。`buildPrompt` 与面板那一份逐字相同
+            // （它读 `config.targetLang`），因此这里把目标语言换成划词那一项再交给它
+            // —— 两份实现不会因为"这一处该用哪个字段"而漂开。
+            var promptConfig = Object.assign({}, config, { targetLang: config.quickTargetLang });
+            return requestJson(config, endpointPath(config), buildRequestBody(config, buildPrompt(promptConfig, selected)))
               .then(function (payload) {
                 var parsed = extractTranslation(payload, config.endpointKind);
                 if (!parsed.ok) {
@@ -978,8 +998,7 @@
                         config.endpointKind +
                         '，但响应里没有对应的字段。\n' +
                         parsed.reason +
-                        '\n\n两种常见原因：接口形态选错了（chat / completion 换一个试试），' +
-                        '或者这个服务不是 OpenAI 兼容的。'
+                        '\n\n可以试试切换接口形态（chat / completion），或者确认这个服务真的提供 OpenAI 兼容层。'
                     );
                   });
                 }
@@ -1001,8 +1020,7 @@
               return reportFailure(
                 '读不到选中的文本',
                 messageOf(error) +
-                  '\n\n（挨个试：把焦点放回那个程序、别让本应用在最前面、或者换一个程序。' +
-                  '合成 Ctrl+C 是这项能力唯一可行的实现，因此这是一条真实存在的限制。）'
+                  '\n\n（把焦点放回那个程序、别让本应用在最前面，或者换一个程序试试。）'
               );
             });
           }
@@ -1051,6 +1069,7 @@
           model: config.model,
           sourceLang: config.sourceLang,
           targetLang: config.targetLang,
+          quickTargetLang: config.quickTargetLang,
           secretsAvailable: !!(ctx.secrets && ctx.secrets.isAvailable && ctx.secrets.isAvailable()),
           settingsAvailable: !!(ctx.settings && ctx.settings.isAvailable && ctx.settings.isAvailable()),
           clipboardWritable: canWriteClipboard(),
