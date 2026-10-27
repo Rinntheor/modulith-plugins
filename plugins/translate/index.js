@@ -7,29 +7,31 @@
 // 这个面板的**主次**：翻译工作台是主角，热键是其中一个入口
 // ============================================================
 //
-// 上一版把这一页做成了"热键流程的配置页" —— 主体是状态行加上一堆地址、模型、
-// 组合键的输入框。那反了。这个插件的本体是**一个翻译工具**：输入一段文字、选两个
-// 语言、拿到译文、之后还能找回来。热键只是"不用切窗口就能用同一个工具"的一条通道，
-// 而它在非 Windows 上根本不存在。
+// 这个插件的本体是**一个翻译工具**：输入一段文字、选两个语言、拿到译文、之后还能
+// 找回来。热键只是"不用切窗口就能用同一个工具"的一条通道，而它在非 Windows 上
+// 根本不存在。
 //
-// 因此这一版的面板结构是：
+// 3.0.0 的界面结构（两栏 + 一个抽屉）：
 //
-//   1. **翻译工作台**（主视图）：原文输入、源/目标语言、翻译、译文与复制；
-//   2. **历史**：持久化在 `ctx.db` 里，可搜索、可分页、可置顶、可删、可清空；
-//   3. **语言配置**：源语言与目标语言，记住上一次的选择；
-//   4. **模型与端点**：地址、接口形态、模型、提示词模板；
-//   5. **热键流程**（单独一节，默认收起）：组合键、API key、注册状态；
-//   6. **统计与权限说明**。
+//   1. **顶栏**：端点探测状态、划词入口（组合键 + 划词目标语言）、设置按钮；
+//   2. **左栏 · 翻译工作台**：语言行（含互换）、原文、动作、译文与复制；
+//   3. **右栏 · 历史**：搜索、置顶筛选、分页，以及每行的复制 / 置顶 / 删除；
+//   4. **设置抽屉**：连接、提示词、划词、数据四页 —— 配置与解释都在这里。
 //
-// 前三节完全不需要热键、不需要 Node 运行时、不需要后台进程 —— 面板直接调
+// 前两栏完全不需要热键、不需要 Node 运行时、不需要后台进程 —— 面板直接调
 // `ctx.http`。
+//
+// 3.0.0 与 2.0.0 最要紧的两处行为变化：
+//   * **划词有自己的目标语言**（`quickTargetLang`）。2.0.0 与工作台共用一个
+//     `targetLang`，于是改工作台的语言会连带改掉热键翻译的语言；
+//   * **不再弹 toast**。回执改成按钮内的短状态，错误留在它发生的那一栏里。
 //
 // ============================================================
 // 两个进程之间只有一条通道：宿主的存储与设置
 // ============================================================
 //
 // 后台把运行状态写在 `ctx.storage` 的 `runtimeStatus` 里；面板读它。没有推送，
-// 因此面板**不会自动更新** —— 只在打开 / 重新可见 / 用户点「刷新」时读一次。
+// 因此面板**不会自动更新** —— 只在打开 / 重新可见 / 做了一次动作之后读一次。
 // 刻意不挂定时轮询：那会让这个插件在后台一直发 RPC，换来的只是更新一份用户
 // 多半没在看的缓存（与 `clipboard-history` 在设置那一节的取舍同一条理由）。
 //
@@ -113,6 +115,7 @@
     triggerCombo: 'triggerCombo',
     sourceLang: 'sourceLang',
     targetLang: 'targetLang',
+    quickTargetLang: 'quickTargetLang',
   };
 
   var DEFAULT_BASE_URL = 'http://127.0.0.1:5566/v1';
@@ -120,6 +123,14 @@
   var DEFAULT_MODEL = 'Hy MT2 1.8B Q4_K_M.gguf';
   var DEFAULT_SOURCE_LANG = 'auto';
   var DEFAULT_TARGET_LANG = '简体中文';
+  /**
+   * 划词翻译的目标语言，与工作台那一项**分开存**。
+   *
+   * 这一项是 3.0.0 的主要变化：上一版两个入口共用一个 `targetLang`，于是
+   * "把工作台改成英文读资料"会连带把热键翻译也改成英文 —— 而用户想要的恰恰是
+   * 划词翻回中文。改回来之后工作台又变回中文，两边互相拉扯。
+   */
+  var DEFAULT_QUICK_TARGET_LANG = '简体中文';
   var DEFAULT_TRIGGER_COMBO = 'Ctrl+Q';
   var DEFAULT_PROMPT_TEMPLATE =
     '把下面这段文本翻译成{target}。只输出译文本身，不要解释、不要加引号、不要重复原文。\n\n{text}';
@@ -365,6 +376,12 @@
       triggerCombo: textOr(source[SETTING_IDS.triggerCombo], DEFAULT_TRIGGER_COMBO),
       sourceLang: textOr(source[SETTING_IDS.sourceLang], DEFAULT_SOURCE_LANG),
       targetLang: textOr(source[SETTING_IDS.targetLang], DEFAULT_TARGET_LANG),
+      // 与 `background.js` 同一条回落链：没设置过 → 跟随工作台那一项 → 缺省值。
+      // 旧版本只写过 targetLang，因此升级之后划词翻译仍然用用户原来选的语言。
+      quickTargetLang: textOr(
+        source[SETTING_IDS.quickTargetLang],
+        textOr(source[SETTING_IDS.targetLang], DEFAULT_QUICK_TARGET_LANG)
+      ),
     };
   }
 
@@ -629,9 +646,6 @@
     };
   }
 
-  var ENTRY_COLUMNS =
-    'id, at, source_lang, target_lang, model, src_chars, body_preview, body_chars, pinned';
-
   /**
    * 取一页历史。
    *
@@ -642,46 +656,39 @@
    *
    * 游标是 `(at, id)` 的严格小于 —— 与 `clipboard-history` 的 `fetchPage` 同一条
    * 设计（`OFFSET 2000` 仍然是让 SQLite 数过前 2000 行）。
+   *
+   * `pinnedOnly` 是 3.0.0 新增的筛选：历史栏的「置顶」页签用它。它必须参与 WHERE
+   * 而不是查完之后在 JS 里过滤 —— 后者会让每页条数少于 `PAGE_SIZE`，分页也会错。
    */
-  function fetchPage(query, cursor) {
+  function fetchPage(query, cursor, pinnedOnly) {
     var search = typeof query === 'string' ? query.trim() : '';
     var anchor = cursor && typeof cursor.at === 'number' ? cursor : null;
+    var params = [];
 
-    if (search) {
-      var sql =
-        'SELECT e.id, e.at, e.source_lang, e.target_lang, e.model, e.src_chars, ' +
-        'e.body_preview, e.body_chars, e.pinned ' +
-        'FROM translate_entries e JOIN translate_bodies b ON b.id = e.id ' +
-        "WHERE b.body LIKE ?1 ESCAPE '\\'";
-      // 参数一律按 `?N` 递增写，且**序号与出现顺序严格对应**：宿主按数组顺序绑定，
-      // 序号写错不会报错，只会把值绑到另一个位置。
-      var params = ['%' + escapeLike(search) + '%'];
-      if (anchor) {
-        var atParam = params.length + 1;
-        sql +=
-          ' AND (e.at < ?' + atParam + ' OR (e.at = ?' + atParam + ' AND e.id < ?' + (atParam + 1) + '))';
-        params.push(anchor.at, anchor.id);
-      }
-      sql += ' ORDER BY e.at DESC, e.id DESC LIMIT ?' + (params.length + 1);
-      params.push(PAGE_SIZE);
-
-      return dbQuery(sql, params).then(function (rows) {
-        return { entries: rows.map(normalizeRow), hasMore: rows.length === PAGE_SIZE };
-      });
+    function bind(value) {
+      params.push(value);
+      return '?' + params.length;
     }
 
-    var listSql = 'SELECT ' + ENTRY_COLUMNS + ' FROM translate_entries';
-    var listParams = [];
+    var where = [];
+    if (search) where.push('b.body LIKE ' + bind('%' + escapeLike(search) + '%') + " ESCAPE '\\'");
+    if (pinnedOnly) where.push('e.pinned = 1');
     if (anchor) {
-      var listAt = listParams.length + 1;
-      listSql +=
-        ' WHERE at < ?' + listAt + ' OR (at = ?' + listAt + ' AND id < ?' + (listAt + 1) + ')';
-      listParams.push(anchor.at, anchor.id);
+      var atParam = bind(anchor.at);
+      var idParam = bind(anchor.id);
+      where.push('(e.at < ' + atParam + ' OR (e.at = ' + atParam + ' AND e.id < ' + idParam + '))');
     }
-    listSql += ' ORDER BY at DESC, id DESC LIMIT ?' + (listParams.length + 1);
-    listParams.push(PAGE_SIZE);
 
-    return dbQuery(listSql, listParams).then(function (rows) {
+    var sql =
+      'SELECT e.id, e.at, e.source_lang, e.target_lang, e.model, e.src_chars, ' +
+      'e.body_preview, e.body_chars, e.pinned ' +
+      'FROM translate_entries e' +
+      (search ? ' JOIN translate_bodies b ON b.id = e.id' : '') +
+      (where.length > 0 ? ' WHERE ' + where.join(' AND ') : '') +
+      ' ORDER BY e.at DESC, e.id DESC LIMIT ' +
+      bind(PAGE_SIZE);
+
+    return dbQuery(sql, params).then(function (rows) {
       return { entries: rows.map(normalizeRow), hasMore: rows.length === PAGE_SIZE };
     });
   }
@@ -1140,6 +1147,29 @@
     return prefix.join('+');
   }
 
+  /**
+   * 把规范化之后的组合键翻成**给人看的写法**（`mod+q` → `Ctrl + Q`）。
+   *
+   * 只用于显示。落盘与比较永远用 `canonicalCombo` 的结果 —— "给人看的写法"与
+   * "宿主认的写法"是两件事，混用它们正是上一版 `Mod+K` 那类值能进设置的原因。
+   */
+  function friendlyCombo(combo) {
+    var canonical = canonicalCombo(combo);
+    if (canonical === '') return '';
+    var mac = !!(window.Modulith && window.Modulith.platform === 'macos');
+    return canonical
+      .split('+')
+      .map(function (part) {
+        if (part === 'mod') return mac ? 'Cmd' : 'Ctrl';
+        if (part === 'shift') return 'Shift';
+        if (part === 'alt') return mac ? 'Option' : 'Alt';
+        if (part === 'space') return 'Space';
+        if (part.length === 1) return part.toUpperCase();
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join(' + ');
+  }
+
   /** 写一个设置项。失败必须**说出来** —— 静默丢掉一次写入是这里最坏的一种。 */
   function saveSetting(id, value) {
     if (!ctx.settings || typeof ctx.settings.set !== 'function') {
@@ -1258,24 +1288,387 @@
   // ============================================================
   // 面板
   // ============================================================
+  //
+  // ============================================================
+  // 这一版的结构：一个工具，而不是一叠配置卡片
+  // ============================================================
+  //
+  // 上一版是单列滚动：标题 → 工作台 → 历史 → 统计 → 模型与端点 → 热键（默认收起）。
+  // 每一节都带着一段"为什么这么设计"的长说明，整页读下来像一份文档，而不是一个工具。
+  //
+  // 这一版改成两栏 + 一个设置抽屉：
+  //
+  //   * **左栏**：翻译工作台。语言行、输入、动作、译文 —— 一眼能看全；
+  //   * **右栏**：历史。搜索、筛选、行内动作，自己滚动；
+  //   * **抽屉**：连接、提示词、划词、数据四页。配置与解释都在这里，主流程上只剩
+  //     用户此刻要做的那件事。
+  //
+  // 三条与上一版不同的取舍：
+  //
+  //   1. **不做浮层提示。** "已保存""已复制""已刷新"这类回执改成按钮内的短状态
+  //      （复制 → 已复制），错误则留在**它发生的那一栏**里。一个每点一下都弹一次
+  //      的 toast，最后会被用户当作噪声无视，连真正的错误也一起无视掉。
+  //   2. **不写长说明。** 每条说明压到一行，解释性的长文交给 README。界面上只留
+  //      "这一项是干什么的"与"它失败时怎么办"。
+  //   3. **工作台与划词各有自己的目标语言。** 见 `quickTargetLang`：改工作台的语言
+  //      不再改动划词的语言（这是上一版最影响使用的一处耦合）。
+
+  // ============================================================
+  // 图标：16px 手写 SVG，与宿主的线宽同一档
+  // ============================================================
+
+  function svgIcon(children, options) {
+    var opts = options || {};
+    return h(
+      'svg',
+      {
+        className: 'tr-icon' + (opts.className ? ' ' + opts.className : ''),
+        width: opts.size || 16,
+        height: opts.size || 16,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: opts.strokeWidth || 1.5,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        'aria-hidden': 'true',
+        focusable: 'false',
+      },
+      children
+    );
+  }
+
+  function IconSettings() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M2 4.4h12' }),
+      h('circle', { key: 'b', cx: 6, cy: 4.4, r: 1.7 }),
+      h('path', { key: 'c', d: 'M2 11.6h12' }),
+      h('circle', { key: 'd', cx: 10.4, cy: 11.6, r: 1.7 }),
+    ]);
+  }
+
+  function IconSearch() {
+    return svgIcon([
+      h('circle', { key: 'a', cx: 7, cy: 7, r: 4.1 }),
+      h('path', { key: 'b', d: 'M10.2 10.2 14 14' }),
+    ]);
+  }
+
+  function IconSwap() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M2.6 5.4h9.2' }),
+      h('path', { key: 'b', d: 'M9.4 3.2 11.6 5.4 9.4 7.6' }),
+      h('path', { key: 'c', d: 'M13.4 10.6H4.2' }),
+      h('path', { key: 'd', d: 'M6.6 8.4 4.4 10.6 6.6 12.8' }),
+    ]);
+  }
+
+  function IconClose() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M4 4l8 8' }),
+      h('path', { key: 'b', d: 'M12 4l-8 8' }),
+    ]);
+  }
+
+  function IconCopy() {
+    return svgIcon([
+      h('rect', { key: 'a', x: 5.4, y: 5.4, width: 8, height: 8, rx: 1.6 }),
+      h('path', { key: 'b', d: 'M10.6 5.4V4A1.5 1.5 0 0 0 9.1 2.5H4A1.5 1.5 0 0 0 2.5 4v5.1A1.5 1.5 0 0 0 4 10.6h1.4' }),
+    ]);
+  }
+
+  function IconCheck() {
+    return svgIcon([h('path', { key: 'a', d: 'M3 8.4 6.1 11.5 13 4.8' })]);
+  }
+
+  function IconPin() {
+    return svgIcon([h('path', { key: 'a', d: 'M4.6 2.6h6.8v10.8L8 10.9l-3.4 2.5z' })]);
+  }
+
+  function IconTrash() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M2.8 4.4h10.4' }),
+      h('path', { key: 'b', d: 'M6 4.4V3h4v1.4' }),
+      h('path', { key: 'c', d: 'M4.4 4.4l.6 9h6l.6-9' }),
+      h('path', { key: 'd', d: 'M6.6 7.2v4' }),
+      h('path', { key: 'e', d: 'M9.4 7.2v4' }),
+    ]);
+  }
+
+  function IconRefresh() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M13.2 8a5.2 5.2 0 1 1-1.7-3.9' }),
+      h('path', { key: 'b', d: 'M13.2 2.6v3h-3' }),
+    ]);
+  }
+
+  function IconArrow() {
+    return svgIcon([
+      h('path', { key: 'a', d: 'M3 8h9.4' }),
+      h('path', { key: 'b', d: 'M9.6 5.2 12.4 8l-2.8 2.8' }),
+    ], { size: 12 });
+  }
+
+  function IconEmpty() {
+    return h(
+      'svg',
+      {
+        className: 'tr-empty-art',
+        width: 52,
+        height: 52,
+        viewBox: '0 0 52 52',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 1.6,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
+        'aria-hidden': 'true',
+      },
+      h('path', {
+        d: 'M11 13h30a4.5 4.5 0 0 1 4.5 4.5v14A4.5 4.5 0 0 1 41 36H25l-9.5 7.5V36H11a4.5 4.5 0 0 1-4.5-4.5v-14A4.5 4.5 0 0 1 11 13z',
+      }),
+      h('path', { d: 'M15 21.5h18' }),
+      h('path', { d: 'M15 27.5h11' })
+    );
+  }
+
+  function IconSpinner() {
+    return h('span', { className: 'tr-spinner', 'aria-hidden': 'true' });
+  }
+
+  // ============================================================
+  // 小工具
+  // ============================================================
+
+  function formatCount(value) {
+    var number = Math.round(Number(value) || 0);
+    return String(number).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function formatDuration(ms) {
+    if (typeof ms !== 'number' || !isFinite(ms) || ms <= 0) return '';
+    return ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s';
+  }
+
+  /** 顶栏那个端点的短标签。长解释放在 `title` 里，不占版面。 */
+  function endpointSummary(cache) {
+    if (!cache) return { text: '未连接', tone: 'off', detail: '还没有探测过端点' };
+    var when = '上次探测 ' + formatTime(cache.at) + '（' + formatAgo(cache.at) + '）';
+    if (cache.ok) {
+      var count = Array.isArray(cache.models) ? cache.models.length : 0;
+      return {
+        text: count > 1 ? count + ' 个模型' : '已连接',
+        tone: 'ok',
+        detail: when + '，读到 ' + count + ' 个模型',
+      };
+    }
+    var text =
+      cache.code === 'refused'
+        ? '服务未启动'
+        : cache.code === 'not-openai'
+          ? '地址不对'
+          : cache.code === 'empty'
+            ? '没有模型'
+            : cache.code === 'auth'
+              ? '需要密钥'
+              : '连接失败';
+    return { text: text, tone: 'error', detail: when + (cache.error ? '\n' + cache.error : '') };
+  }
+
+  function Field(props) {
+    return h(
+      'div',
+      { className: 'tr-field' },
+      h('label', { className: 'tr-field-label', htmlFor: props.htmlFor }, props.label),
+      props.hint ? h('p', { className: 'tr-field-hint' }, props.hint) : null,
+      props.children
+    );
+  }
+
+  function StatCell(props) {
+    return h(
+      'div',
+      { className: 'tr-stat' },
+      h('div', { className: 'tr-stat-value' }, props.value),
+      h('div', { className: 'tr-stat-label' }, props.label)
+    );
+  }
+
+  // ============================================================
+  // 录制式组合键控件
+  // ============================================================
+  //
+  // "按一下"而不是"打一行字"：上一版的自由输入框让用户去猜语法，而写错的代价是
+  // 一分钟之后一次静默的注册失败。控件自己把按键变成合法字符串，并在不合法时就地
+  // 说明原因（把宿主那句话抄过来，而不是等注册失败）。
+  function HotkeyRecorder(props) {
+    var recordingState = React.useState(false);
+    var recording = recordingState[0];
+    var setRecording = recordingState[1];
+
+    var previewState = React.useState('');
+    var preview = previewState[0];
+    var setPreview = previewState[1];
+
+    var messageState = React.useState('');
+    var message = messageState[0];
+    var setMessage = messageState[1];
+
+    var bound = canonicalCombo(props.combo);
+    var finishedRef = React.useRef(false);
+    var sessionRef = React.useRef(0);
+
+    function stopRecording() {
+      setRecording(false);
+      setPreview('');
+    }
+
+    function begin() {
+      sessionRef.current += 1;
+      finishedRef.current = false;
+      setMessage('');
+      setPreview('');
+      setRecording(true);
+    }
+
+    /** Escape 取消：原值保留，**不弹提示** —— 控件回到静止态本身就是回执。 */
+    function cancel() {
+      sessionRef.current += 1;
+      finishedRef.current = true;
+      stopRecording();
+      setMessage('');
+    }
+
+    function onKeyDown(event) {
+      if (!recording || finishedRef.current) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (isLoneModifierKey(event)) {
+        setPreview(comboPreview(event));
+        return;
+      }
+
+      if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+        cancel();
+        return;
+      }
+
+      var key = hotkeyKeyName(event.key);
+      if (key === '') {
+        setPreview(comboPreview(event));
+        setMessage('这个键不能用作组合键。可用：字母 / 数字、F1..F24，以及 Backspace、Tab、Enter、Escape、Space、PageUp、PageDown、Home、End、方向键、Insert、Delete。');
+        return;
+      }
+
+      var combo = comboFromEvent(event);
+      if (combo === null) {
+        setPreview(comboPreview(event));
+        setMessage('单个普通键不能做全局热键 —— 它会从整台机器的所有程序里被拿走。请加上 Ctrl / Alt / Shift，或改用 F1..F24。');
+        return;
+      }
+
+      finishedRef.current = true;
+      setPreview(comboPreview(event));
+      setMessage('正在保存 ' + friendlyCombo(combo) + '…');
+
+      var session = sessionRef.current;
+      var outcome = props.onCommit(combo);
+      if (!outcome || typeof outcome.then !== 'function') {
+        finishSuccess(session);
+        return;
+      }
+      outcome.then(
+        function () {
+          finishSuccess(session);
+        },
+        function () {
+          if (sessionRef.current !== session) return;
+          finishedRef.current = false;
+          setMessage('没有保存。请再按一个组合键，或者按 Esc 取消。');
+        }
+      );
+    }
+
+    function finishSuccess(session) {
+      if (sessionRef.current !== session) return;
+      finishedRef.current = true;
+      stopRecording();
+      setMessage('');
+    }
+
+    var label = bound === '' ? '未设置' : friendlyCombo(bound);
+    var shown = recording ? '请按下组合键…' : label;
+
+    return h(
+      'div',
+      { className: 'tr-recorder-row' },
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'tr-recorder' + (recording ? ' tr-recorder-on' : ''),
+          onBlur: function () {
+            if (recording) cancel();
+          },
+          onClick: function () {
+            if (recording) cancel();
+            else begin();
+          },
+          onKeyDown: onKeyDown,
+          'aria-label': '触发组合键：' + label,
+          'aria-pressed': recording ? 'true' : 'false',
+          disabled: props.disabled === true,
+        },
+        h(
+          'span',
+          { className: 'tr-recorder-value' + (bound === '' && !recording ? ' tr-recorder-empty' : '') },
+          shown
+        ),
+        recording
+          ? h('span', { className: 'tr-recorder-wait' }, preview ? preview : '等待按键…')
+          : h('span', { className: 'tr-recorder-hint' }, '点击后按下组合键')
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'tr-btn tr-btn-ghost tr-btn-sm',
+          disabled: props.disabled === true || bound === '',
+          onClick: function () {
+            setMessage('');
+            stopRecording();
+            props.onClear();
+          },
+        },
+        '清除'
+      ),
+      recording || message
+        ? h(
+            'p',
+            { className: 'tr-recorder-msg' + (message ? ' tr-recorder-msg-warn' : '') },
+            message || '按住 Ctrl / Alt / Shift 中的至少一个再按主键；只按 F1..F24 也可以。Esc 取消。'
+          )
+        : null
+    );
+  }
+
+  // ============================================================
+  // 面板主体
+  // ============================================================
 
   function TranslatePanel() {
+    // ---------- 快照与草稿 ----------
     var snapshotState = React.useState(null);
     var snapshot = snapshotState[0];
     var setSnapshot = snapshotState[1];
-
-    var noticeState = React.useState(null);
-    var notice = noticeState[0];
-    var setNotice = noticeState[1];
 
     var draftState = React.useState(null);
     var draft = draftState[0];
     var setDraft = draftState[1];
 
-    var keyDraftState = React.useState('');
-    var keyDraft = keyDraftState[0];
-    var setKeyDraft = keyDraftState[1];
-
+    // ---------- 工作台 ----------
     var inputState = React.useState('');
     var input = inputState[0];
     var setInput = inputState[1];
@@ -1288,16 +1681,36 @@
     var busy = busyState[0];
     var setBusy = busyState[1];
 
+    var noticeState = React.useState(null);
+    var notice = noticeState[0];
+    var setNotice = noticeState[1];
+
+    // ---------- 抽屉 ----------
+    var drawerOpenState = React.useState(false);
+    var drawerOpen = drawerOpenState[0];
+    var setDrawerOpen = drawerOpenState[1];
+
+    var drawerTabState = React.useState('connection');
+    var drawerTab = drawerTabState[0];
+    var setDrawerTab = drawerTabState[1];
+
+    var settingsErrorState = React.useState('');
+    var settingsError = settingsErrorState[0];
+    var setSettingsError = settingsErrorState[1];
+
     var syncingState = React.useState(false);
     var syncing = syncingState[0];
     var setSyncing = syncingState[1];
 
-    var saveFlashState = React.useState('');
-    var saveFlash = saveFlashState[0];
-    var setSaveFlash = saveFlashState[1];
+    var keyDraftState = React.useState('');
+    var keyDraft = keyDraftState[0];
+    var setKeyDraft = keyDraftState[1];
 
-    // ---------- 历史的状态 ----------
+    var keyBusyState = React.useState(false);
+    var keyBusy = keyBusyState[0];
+    var setKeyBusy = keyBusyState[1];
 
+    // ---------- 历史 ----------
     var entriesState = React.useState([]);
     var entries = entriesState[0];
     var setEntries = entriesState[1];
@@ -1314,6 +1727,10 @@
     var search = searchState[0];
     var setSearch = searchState[1];
 
+    var filterState = React.useState('all');
+    var filter = filterState[0];
+    var setFilter = filterState[1];
+
     var historyBusyState = React.useState(false);
     var historyBusy = historyBusyState[0];
     var setHistoryBusy = historyBusyState[1];
@@ -1326,74 +1743,79 @@
     var stats = statsState[0];
     var setStats = statsState[1];
 
-    var openEntryState = React.useState(null);
-    var openEntry = openEntryState[0];
-    var setOpenEntry = openEntryState[1];
+    var selectedIdState = React.useState('');
+    var selectedId = selectedIdState[0];
+    var setSelectedId = selectedIdState[1];
 
-    // 热键那一节默认**收起**：它是这个工具的一条入口，不是它的主体。
-    var hotkeyOpenState = React.useState(false);
-    var hotkeyOpen = hotkeyOpenState[0];
-    var setHotkeyOpen = hotkeyOpenState[1];
+    // ---------- 轻微交互状态 ----------
+    var copiedState = React.useState('');
+    var copied = copiedState[0];
+    var setCopied = copiedState[1];
+
+    var confirmState = React.useState('');
+    var confirm = confirmState[0];
+    var setConfirm = confirmState[1];
 
     var aliveRef = React.useRef(true);
+    var copiedTimer = React.useRef(null);
+    var confirmTimer = React.useRef(null);
+    var historyMounted = React.useRef(false);
+    // 最新一次生效的查询条件。`reloadHistory` 会在"切回本模块"这类由较早渲染
+    // 产生的闭包里被调用，直接用闭包里的 search / filter 会读到旧值。
+    var searchRef = React.useRef(search);
+    var filterRef = React.useRef(filter);
+
     React.useEffect(function () {
       return function () {
         aliveRef.current = false;
+        if (copiedTimer.current) clearTimeout(copiedTimer.current);
+        if (confirmTimer.current) clearTimeout(confirmTimer.current);
       };
     }, []);
 
-    var flashTimer = React.useRef(null);
-    function flash(message) {
-      setSaveFlash(message);
-      if (flashTimer.current) clearTimeout(flashTimer.current);
-      flashTimer.current = setTimeout(function () {
-        setSaveFlash('');
-      }, 2200);
-    }
-    React.useEffect(function () {
-      return function () {
-        if (flashTimer.current) clearTimeout(flashTimer.current);
-      };
-    }, []);
+    var config = snapshot ? snapshot.config : normalizeConfig({});
+    var view = draft === null ? config : draft;
 
-    /** 重新读一遍快照。**不轮询** —— 只在需要时调（见文件头）。 */
+    var status = snapshot ? snapshot.status : null;
+    var cache = snapshot ? snapshot.cache : null;
+    var keyInfo = snapshot ? snapshot.keyInfo : { known: true, present: false, error: '' };
+
+    var hotkeyAvailable = !!(ctx.hotkey && ctx.hotkey.isAvailable && ctx.hotkey.isAvailable());
+    var selectionAvailable = !!(
+      ctx.selection &&
+      ctx.selection.isAvailable &&
+      ctx.selection.isAvailable()
+    );
+    var clipboardAvailable = !!(ctx.clipboard && typeof ctx.clipboard.writeText === 'function');
+    var modelMissing = !String(view.model || '').trim();
+
+    var effectiveSource = SOURCE_LANGS.some(function (item) {
+      return item.value === view.sourceLang;
+    })
+      ? view.sourceLang
+      : DEFAULT_SOURCE_LANG;
+    var effectiveTarget = TARGET_LANGS.indexOf(view.targetLang) === -1 ? TARGET_LANGS[0] : view.targetLang;
+    var effectiveQuickTarget =
+      TARGET_LANGS.indexOf(view.quickTargetLang) === -1 ? DEFAULT_QUICK_TARGET_LANG : view.quickTargetLang;
+
+    var hotkeyInfo = describeHotkey(status, hotkeyAvailable, selectionAvailable);
+    var endpointInfo = endpointSummary(cache);
+
+    // ----------------------------------------------------------
+    // 快照
+    // ----------------------------------------------------------
+
     function refresh() {
       return loadSnapshot().then(function (next) {
         if (!aliveRef.current) return next;
         setSnapshot(next);
         setDraft(function (current) {
-          // 已经有一份草稿（用户正在改）时**不覆盖它**：用户改到一半时后台/别处
-          // 触发的一次刷新会把他的输入抹掉，那是很难再复现的一类"输入丢了"。
+          // 用户正在改的那份草稿**不覆盖**：一次后台刷新把输入抹掉，是最难复现的
+          // "输入丢了"。
           return current === null ? next.config : current;
         });
         return next;
       });
-    }
-
-    /** 重新读第一页历史与统计。搜索词变了、删了一条、清空之后都要走它。 */
-    function reloadHistory(term) {
-      if (!databaseAvailable()) {
-        setDbError('这个运行位置没有 ctx.db（清单里缺 plugin-data 权限）');
-        return Promise.resolve();
-      }
-      setHistoryBusy(true);
-      var query = term === undefined ? search : term;
-      return fetchPage(query, null)
-        .then(function (page) {
-          if (!aliveRef.current) return null;
-          setEntries(page.entries);
-          setCursor(page.entries.length > 0 ? page.entries[page.entries.length - 1] : null);
-          setHasMore(page.hasMore);
-          setOpenEntry(null);
-          return refreshStats();
-        })
-        .catch(function (error) {
-          if (!aliveRef.current) return;
-          setDbError('读历史失败：' + messageOf(error));
-        })
-        .then(function () {
-          if (aliveRef.current) setHistoryBusy(false);
-        });
     }
 
     function refreshStats() {
@@ -1414,7 +1836,36 @@
       );
     }
 
-    /** 首次装载：建表 → 裁一次 → 读第一页。 */
+    // ----------------------------------------------------------
+    // 历史
+    // ----------------------------------------------------------
+
+    function reloadHistory(term, filterValue) {
+      if (!databaseAvailable()) {
+        setDbError('这个运行位置没有 ctx.db（清单里缺 plugin-data 权限）');
+        return Promise.resolve();
+      }
+      var query = term === undefined ? searchRef.current : term;
+      var mode = filterValue === undefined ? filterRef.current : filterValue;
+      setHistoryBusy(true);
+      return fetchPage(query, null, mode === 'pinned')
+        .then(function (page) {
+          if (!aliveRef.current) return null;
+          setEntries(page.entries);
+          setCursor(page.entries.length > 0 ? page.entries[page.entries.length - 1] : null);
+          setHasMore(page.hasMore);
+          return refreshStats();
+        })
+        .catch(function (error) {
+          if (!aliveRef.current) return;
+          setDbError('读历史失败：' + messageOf(error));
+        })
+        .then(function () {
+          if (aliveRef.current) setHistoryBusy(false);
+        });
+    }
+
+    // 首次装载：建表 → 裁一次 → 读第一页。
     React.useEffect(function () {
       if (!databaseAvailable()) {
         setDbError('这个运行位置没有 ctx.db（清单里缺 plugin-data 权限）');
@@ -1422,15 +1873,13 @@
       }
       ensureSchema()
         .then(function () {
-          // 启动时裁一次：应用关着的时候天数照常在走，而那段里没有任何插入来触发裁剪。
           return prune();
         })
         .then(function () {
-          return reloadHistory('');
+          return reloadHistory('', 'all');
         })
         .catch(function (error) {
-          if (!aliveRef.current) return;
-          setDbError('翻译历史不可用：' + messageOf(error));
+          if (aliveRef.current) setDbError('翻译历史不可用：' + messageOf(error));
         });
     }, []);
 
@@ -1439,10 +1888,43 @@
     }, []);
 
     /**
-     * 模块重新可见时刷新一次。
+     * 搜索与筛选：输入停下 300ms 后再查。
      *
-     * 这是"面板看不见的时候后台发生了什么"唯一能被发现的时机 —— 没有推送通道
-     * （见文件头）。它的触发频率天然有界（用户切标签），因此不需要再做节流。
+     * 首轮**跳过** —— 初次装载由上面那个 effect 负责（它要先建表、裁一次）。少了
+     * 这个跳过，挂载瞬间会并发两次查询，而其中一次可能早于建表。
+     */
+    React.useEffect(
+      function () {
+        searchRef.current = search;
+      },
+      [search]
+    );
+
+    React.useEffect(
+      function () {
+        filterRef.current = filter;
+      },
+      [filter]
+    );
+
+    React.useEffect(
+      function () {
+        if (!historyMounted.current) {
+          historyMounted.current = true;
+          return;
+        }
+        var timer = setTimeout(function () {
+          reloadHistory(search, filter);
+        }, 300);
+        return function () {
+          clearTimeout(timer);
+        };
+      },
+      [search, filter]
+    );
+
+    /**
+     * 模块重新可见时刷新一次。没有推送通道，切回来是唯一能发现后台状态变化的机会。
      */
     var active = Modulith.useModuleActive();
     React.useEffect(
@@ -1455,9 +1937,10 @@
       [active]
     );
 
-    var config = snapshot ? snapshot.config : normalizeConfig({});
+    // ----------------------------------------------------------
+    // 设置
+    // ----------------------------------------------------------
 
-    /** 草稿上改一个字段（不落盘）。 */
     function editDraft(id, value) {
       setDraft(function (current) {
         var base = current === null ? config : current;
@@ -1470,53 +1953,69 @@
       });
     }
 
-    /** 落盘一个字段并按服务端实际值回读一次（`settings.set` 不回传，读回来最稳）。 */
-    function commit(id, value) {
+    function saveSettingValue(id, value) {
+      setSettingsError('');
       return saveSetting(id, value)
         .then(function () {
           return refresh();
         })
-        .then(function () {
-          flash('已保存：' + id);
-        })
         .catch(function (error) {
-          // 写入失败必须说出来：静默丢掉会让用户以为设置生效了。
-          setNotice({ tone: 'error', title: '设置没有保存', body: messageOf(error) });
+          if (!aliveRef.current) return;
+          setSettingsError('设置没有保存：' + messageOf(error));
         });
     }
 
-    function commitKey() {
-      var value = keyDraft;
-      if (!ctx.secrets || typeof ctx.secrets.set !== 'function') {
-        setNotice({ tone: 'error', title: '无法保存 API key', body: '这个运行位置没有 ctx.secrets' });
-        return Promise.resolve();
-      }
-      return Promise.resolve()
-        .then(function () {
-          if (value === '') {
-            // 空输入 = 删除。这是"我不想再用密钥"唯一需要的操作，而把空串写进去
-            // 会让服务端收到一个 `Authorization: Bearer `（畸形的头）。
-            return ctx.secrets.delete(SECRET_API_KEY).then(function () {
-              setKeyDraft('');
-              flash('API key 已删除');
-            });
-          }
-          return ctx.secrets.set(SECRET_API_KEY, value).then(function () {
-            // **立刻清空输入框**：值已经进了加密库，留在 DOM 里没有意义，
-            // 而它留在那儿就多一处可能被截图或读走的地方。
-            setKeyDraft('');
-            flash('API key 已保存到加密密钥库');
-          });
-        })
-        .then(function () {
-          return refresh();
-        })
-        .catch(function (error) {
-          setNotice({ tone: 'error', title: 'API key 没有保存', body: messageOf(error) });
-        });
+    function commitField(id) {
+      return saveSettingValue(id, view[id]);
     }
 
-    /** 从加密库取一次密钥。取不到时**如实记一条提示**并返回 null（不带 Authorization 继续）。 */
+    /** 地址与模型名去掉首尾空白再落盘（从别处复制时常常带着空格）。 */
+    function commitTrimmed(id) {
+      var value = String(view[id] === undefined || view[id] === null ? '' : view[id]).trim();
+      if (value !== view[id]) editDraft(id, value);
+      return saveSettingValue(id, value);
+    }
+
+    function setQuickTarget(value) {
+      editDraft(SETTING_IDS.quickTargetLang, value);
+      return saveSettingValue(SETTING_IDS.quickTargetLang, value);
+    }
+
+    function swapLanguages() {
+      if (effectiveSource === 'auto') return;
+      var nextSource = effectiveTarget;
+      var nextTarget = effectiveSource;
+      editDraft(SETTING_IDS.sourceLang, nextSource);
+      editDraft(SETTING_IDS.targetLang, nextTarget);
+      return saveSettingValue(SETTING_IDS.sourceLang, nextSource).then(function () {
+        return saveSettingValue(SETTING_IDS.targetLang, nextTarget);
+      });
+    }
+
+    // ----------------------------------------------------------
+    // 动作回执（不弹 toast）
+    // ----------------------------------------------------------
+
+    function markCopied(key) {
+      setCopied(key);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(function () {
+        setCopied('');
+      }, 1500);
+    }
+
+    function askConfirm(key) {
+      setConfirm(key);
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
+      confirmTimer.current = setTimeout(function () {
+        setConfirm('');
+      }, 4000);
+    }
+
+    // ----------------------------------------------------------
+    // 翻译
+    // ----------------------------------------------------------
+
     function readSecretKey() {
       if (!ctx.secrets || typeof ctx.secrets.get !== 'function') return Promise.resolve(null);
       return Promise.resolve(ctx.secrets.get(SECRET_API_KEY)).then(
@@ -1525,7 +2024,6 @@
         },
         function (error) {
           setNotice({
-            tone: 'warning',
             title: 'API key 读不出来',
             body: messageOf(error) + '\n\n请求会不带 Authorization 头继续发。',
           });
@@ -1534,93 +2032,23 @@
       );
     }
 
-    function runSync() {
-      if (syncing) return Promise.resolve();
-      setSyncing(true);
-      setNotice(null);
-      var current = draft === null ? config : draft;
-      var modelForRequest = normalizeConfig(current);
-      // 同步要用**当前草稿里**的地址与形态（用户可能刚改完还没保存就想试一下），
-      // 但密钥只从加密库里取 —— 它不在草稿里，也永远不会在。
-      return readSecretKey()
-        .then(function (key) {
-          modelForRequest.apiKey = key;
-          return syncModels(modelForRequest);
-        })
-        .then(function (outcome) {
-          if (!aliveRef.current) return outcome;
-          // 缓存与展示分开：**缓存的永远是结果**（成功或失败都写），
-          // 因为"上次探测是什么结果、什么时候"正是状态行要说的事。
-          var save = ctx.storage ? ctx.storage.set(CACHE_KEY, outcome) : Promise.resolve();
-          return Promise.resolve(save).then(function () {
-            if (!outcome.ok) {
-              setNotice({ tone: 'error', title: '同步模型失败', body: outcome.error });
-              return refresh();
-            }
-
-            if (outcome.models.length === 1) {
-              // ============================================================
-              // 只有一个模型时**自动选中** —— 这是 llama.cpp 最常见的形态
-              // ============================================================
-              //
-              // 一台机器上跑一个翻译模型是本插件的典型用法，那时"让用户从一份
-              // 只有一个元素的清单里点一下"纯粹是浪费。多模型时**不猜**：
-              // 猜错的后果是拿一个生成的模型去翻译，而错误信息会指向别处。
-              var only = outcome.models[0];
-              setNotice({
-                tone: 'success',
-                title: '已选中 ' + only,
-                body:
-                  '服务端只有这一个模型，已经把它写进设置。探测时刻：' + formatTime(outcome.at) + '。',
-              });
-              return saveSetting(SETTING_IDS.model, only).then(function () {
-                return refresh();
-              });
-            }
-
-            setNotice({
-              tone: 'info',
-              title: '读到 ' + outcome.models.length + ' 个模型',
-              body: '在下面点一个作为默认模型。探测时刻：' + formatTime(outcome.at) + '。',
-            });
-            return refresh();
-          });
-        })
-        .catch(function (error) {
-          setNotice({ tone: 'error', title: '同步模型失败', body: messageOf(error) });
-        })
-        .then(function () {
-          if (aliveRef.current) setSyncing(false);
-        });
-    }
-
-    /**
-     * 翻一段文字。
-     *
-     * 顺序是刻意的：**先翻译、成功了再写历史**。反过来的话，一次失败的翻译
-     * （服务没起、模型名写错）也会在历史里留下一条空记录，而用户无法区分"我翻过
-     * 这个但失败了"与"历史坏了"。
-     */
     function translate(text) {
       var trimmed = typeof text === 'string' ? text.trim() : '';
-      if (trimmed === '') {
-        setNotice({ tone: 'warning', title: '没有可翻译的内容', body: '先输入或粘贴一段文字。' });
-        return Promise.resolve();
-      }
-      if (busy) return Promise.resolve();
-      setBusy(true);
-      setNotice(null);
+      if (trimmed === '' || busy) return Promise.resolve();
 
       var current = normalizeConfig(draft === null ? config : draft);
       if (!current.model.trim()) {
-        setBusy(false);
         setNotice({
-          tone: 'warning',
-          title: '还没有配置模型',
-          body: '到下面「模型与端点」那一节点一次「同步模型」，从服务端实际加载的模型里挑一个。',
+          title: '还没有选择模型',
+          body: '到「设置 → 连接」点一次「同步模型」，从服务端实际加载的模型里选一个。',
+          action: 'connection',
         });
         return Promise.resolve();
       }
+
+      setBusy(true);
+      setNotice(null);
+      var startedAt = Date.now();
 
       return readSecretKey()
         .then(function (key) {
@@ -1640,21 +2068,25 @@
                 current.endpointKind +
                 '）：\n' +
                 parsed.reason +
-                '\n\n两种常见原因：接口形态选错了（chat / completion 换一个试试），或者这个服务不是 OpenAI 兼容的。'
+                '\n\n可以试试切换接口形态（chat / completion），或者确认这个服务真的提供 OpenAI 兼容层。'
             );
           }
           if (!aliveRef.current) return null;
 
           var at = Date.now();
+          var elapsed = at - startedAt;
+          setNotice(null);
           setResult({
             at: at,
             sourceLang: current.sourceLang,
             target: current.targetLang,
             model: current.model,
             text: parsed.text,
+            elapsedMs: elapsed,
+            fromHistory: false,
           });
 
-          // 历史写失败**不影响这次结果**：译文已经在屏幕上了。与 `prune` 同一条取向。
+          // 历史写失败不影响这次结果：译文已经在屏幕上了。
           return recordEntry({
             at: at,
             sourceLang: current.sourceLang,
@@ -1663,7 +2095,8 @@
             srcChars: trimmed.length,
             body: parsed.text,
           })
-            .then(function () {
+            .then(function (id) {
+              if (id) setSelectedId(String(id));
               return prune();
             })
             .then(function () {
@@ -1676,20 +2109,20 @@
         })
         .catch(function (error) {
           if (!aliveRef.current) return;
-          setNotice({ tone: 'error', title: '翻译失败', body: messageOf(error) });
+          setNotice({
+            title: '翻译失败',
+            body: messageOf(error),
+            action: 'retry',
+          });
         })
         .then(function () {
           if (aliveRef.current) setBusy(false);
         });
     }
 
-    function copyText(text) {
-      if (!ctx.clipboard || typeof ctx.clipboard.writeText !== 'function') {
-        setNotice({
-          tone: 'error',
-          title: '复制不了',
-          body: '这个运行位置没有 ctx.clipboard.writeText。',
-        });
+    function copyText(text, key) {
+      if (!clipboardAvailable) {
+        setNotice({ title: '复制不了', body: '这个运行位置没有剪贴板写入能力。' });
         return Promise.resolve();
       }
       return Promise.resolve()
@@ -1697,20 +2130,44 @@
           return ctx.clipboard.writeText(text);
         })
         .then(function () {
-          flash('已复制到剪贴板');
+          markCopied(key);
         })
         .catch(function (error) {
-          // 浏览器会拒绝未聚焦页面上的剪贴板写入 —— 那是拒绝，不是缺陷。
-          setNotice({ tone: 'error', title: '复制失败', body: messageOf(error) });
+          setNotice({ title: '复制失败', body: messageOf(error) });
         });
     }
 
-    // ---------- 历史上的动作 ----------
+    // ----------------------------------------------------------
+    // 历史动作
+    // ----------------------------------------------------------
+
+    function openEntry(entry) {
+      return readBody(entry.id).then(
+        function (body) {
+          if (!aliveRef.current) return;
+          setSelectedId(String(entry.id));
+          setNotice(null);
+          setResult({
+            at: entry.at,
+            sourceLang: entry.sourceLang,
+            target: entry.targetLang,
+            model: entry.model,
+            text: body || entry.preview,
+            elapsedMs: 0,
+            fromHistory: true,
+          });
+        },
+        function (error) {
+          if (!aliveRef.current) return;
+          setNotice({ title: '读这条历史失败', body: messageOf(error) });
+        }
+      );
+    }
 
     function loadMore() {
-      if (!cursor || historyBusy) return;
+      if (!cursor || historyBusy) return Promise.resolve();
       setHistoryBusy(true);
-      return fetchPage(search, cursor)
+      return fetchPage(search, cursor, filter === 'pinned')
         .then(function (page) {
           if (!aliveRef.current) return;
           setEntries(function (current) {
@@ -1727,45 +2184,8 @@
         });
     }
 
-    /**
-     * 打开一条：把**全文**取回来（列表里只有预览），并放进结果区。
-     *
-     * 「打开」与 `clipboard-history` 那一处同一个含义 —— 把这一条送回主界面。
-     * 这里只是把译文放进结果区（于是「复制译文」那一套动作立刻可用）。
-     *
-     * ⚠️ **原文没有被存下来，因此工作台的输入框不会被填上。** 这一版的历史只存
-     * 译文与原文的**字符数**：存原文意味着把用户粘进来的每一段话都落一次盘，而
-     * 一段被翻译的文字里出现密码、密钥、合同条款的概率一点也不低。要让"打开之后
-     * 再翻一次"可用就得付那个代价，而这一版明确不付。
-     */
-    function openHistoryEntry(entry) {
-      return readBody(entry.id).then(
-        function (body) {
-          if (!aliveRef.current) return;
-          var text = body || entry.preview;
-          setOpenEntry({ id: entry.id, text: text });
-          setResult({
-            at: entry.at,
-            sourceLang: entry.sourceLang,
-            target: entry.targetLang,
-            model: entry.model,
-            text: text,
-          });
-          setNotice({
-            tone: 'info',
-            title: '已打开这一条',
-            body:
-              '译文在下面的结果区，可以复制。原文没有存进历史（见历史那一节的说明），' +
-              '因此输入框保持原样 —— 想再翻一次就把它重新粘进去。',
-          });
-        },
-        function (error) {
-          setNotice({ tone: 'error', title: '读这条历史失败', body: messageOf(error) });
-        }
-      );
-    }
-
-    function removeHistoryEntry(id) {
+    function removeEntry(id) {
+      setConfirm('');
       return deleteEntries([id])
         .then(function () {
           return refreshStats();
@@ -1774,7 +2194,7 @@
           return reloadHistory();
         })
         .catch(function (error) {
-          setNotice({ tone: 'error', title: '删除失败', body: messageOf(error) });
+          setNotice({ title: '删除失败', body: messageOf(error) });
         });
     }
 
@@ -1787,11 +2207,12 @@
           return reloadHistory();
         })
         .catch(function (error) {
-          setNotice({ tone: 'error', title: '置顶状态没有保存', body: messageOf(error) });
+          setNotice({ title: '置顶状态没有保存', body: messageOf(error) });
         });
     }
 
     function clearHistory(includePinned) {
+      setConfirm('');
       var sql = includePinned
         ? 'SELECT id FROM translate_entries'
         : 'SELECT id FROM translate_entries WHERE pinned = 0';
@@ -1804,1166 +2225,1241 @@
             })
           );
         })
-        .then(function (count) {
-          flash(count > 0 ? '已删除 ' + count + ' 条历史' : '没有可删除的条目');
+        .then(function () {
           return reloadHistory();
         })
         .catch(function (error) {
-          setNotice({ tone: 'error', title: '清空失败', body: messageOf(error) });
+          setNotice({ title: '清空失败', body: messageOf(error) });
         });
     }
 
-    if (snapshot === null) {
-      return h('div', { className: 'tr-root' }, h('div', { className: 'tr-loading' }, '正在读取状态…'));
+    // ----------------------------------------------------------
+    // 模型同步与密钥
+    // ----------------------------------------------------------
+
+    function runSync() {
+      if (syncing) return Promise.resolve();
+      setSyncing(true);
+      setSettingsError('');
+      var current = normalizeConfig(draft === null ? config : draft);
+      return readSecretKey()
+        .then(function (key) {
+          current.apiKey = key;
+          return syncModels(current);
+        })
+        .then(function (outcome) {
+          if (!aliveRef.current) return outcome;
+          var save = ctx.storage ? ctx.storage.set(CACHE_KEY, outcome) : Promise.resolve();
+          return Promise.resolve(save).then(function () {
+            if (!outcome.ok) {
+              setSettingsError(outcome.error);
+              return refresh();
+            }
+            if (outcome.models.length === 1) {
+              // 单模型是 llama.cpp 的常态：直接选中它，省掉一次"从一项清单里点一下"。
+              return saveSettingValue(SETTING_IDS.model, outcome.models[0]);
+            }
+            return refresh();
+          });
+        })
+        .catch(function (error) {
+          setSettingsError('同步模型失败：' + messageOf(error));
+        })
+        .then(function () {
+          if (aliveRef.current) setSyncing(false);
+        });
     }
 
-    var view = draft === null ? config : draft;
-    var status = snapshot.status;
-    var cache = snapshot.cache;
-    var keyInfo = snapshot.keyInfo;
+    function commitKey() {
+      if (!ctx.secrets || typeof ctx.secrets.set !== 'function') {
+        setSettingsError('这个运行位置没有 ctx.secrets');
+        return Promise.resolve();
+      }
+      setKeyBusy(true);
+      setSettingsError('');
+      var value = keyDraft;
+      return Promise.resolve()
+        .then(function () {
+          if (value === '') {
+            return ctx.secrets.delete(SECRET_API_KEY).then(function () {
+              setKeyDraft('');
+            });
+          }
+          return ctx.secrets.set(SECRET_API_KEY, value).then(function () {
+            // 值已经进加密库，立刻清空输入框 —— 留在 DOM 里没有意义，只会多一处可能
+            // 被截图或读走的地方。
+            setKeyDraft('');
+          });
+        })
+        .then(function () {
+          return refresh();
+        })
+        .catch(function (error) {
+          setSettingsError('API key 没有保存：' + messageOf(error));
+        })
+        .then(function () {
+          if (aliveRef.current) setKeyBusy(false);
+        });
+    }
 
-    var hotkeyAvailable = !!(ctx.hotkey && ctx.hotkey.isAvailable && ctx.hotkey.isAvailable());
-    var selectionAvailable = !!(
-      ctx.selection &&
-      ctx.selection.isAvailable &&
-      ctx.selection.isAvailable()
+    // ----------------------------------------------------------
+    // 抽屉开关
+    // ----------------------------------------------------------
+
+    function openSettings(tab) {
+      setSettingsError('');
+      setDrawerTab(tab || 'connection');
+      setDrawerOpen(true);
+    }
+
+    React.useEffect(
+      function () {
+        if (!drawerOpen) return undefined;
+        function onKeyDown(event) {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          setDrawerOpen(false);
+        }
+        window.addEventListener('keydown', onKeyDown);
+        return function () {
+          window.removeEventListener('keydown', onKeyDown);
+        };
+      },
+      [drawerOpen]
     );
-    var clipboardAvailable = !!(ctx.clipboard && typeof ctx.clipboard.writeText === 'function');
 
-    var hotkeyLine = describeHotkey(status, hotkeyAvailable, selectionAvailable);
-    var endpointLine = describeEndpoint(cache, status);
+    // ----------------------------------------------------------
+    // 渲染零件
+    // ----------------------------------------------------------
 
-    // 语言选择：草稿里优先（用户可能刚改完还没保存，但"翻译"用的是草稿值）。
-    var effectiveSource = SOURCE_LANGS.some(function (item) {
-      return item.value === view.sourceLang;
-    })
-      ? view.sourceLang
-      : DEFAULT_SOURCE_LANG;
-    var effectiveTarget = TARGET_LANGS.indexOf(view.targetLang) === -1 ? TARGET_LANGS[0] : view.targetLang;
+    function renderPill(options) {
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'tr-pill',
+          title: options.title || '',
+          onClick: options.onClick,
+        },
+        options.dot
+          ? h('span', { className: 'tr-dot tr-dot-' + options.dot, 'aria-hidden': 'true' })
+          : null,
+        options.children
+      );
+    }
 
-    return h(
-      'div',
-      { className: 'tr-root' },
-      h(
-        'div',
-        { className: 'tr-inner' },
-        // ============================================================
-        // 标题
-        // ============================================================
+    function renderTopbar() {
+      return h(
+        'header',
+        { className: 'tr-topbar' },
         h(
           'div',
-          { className: 'tr-head' },
-          h('h2', { className: 'tr-title' }, '划词翻译'),
+          { className: 'tr-brand' },
+          h('h1', { className: 'tr-title' }, '划词翻译'),
+          h('span', { className: 'tr-subtitle' }, '本机模型')
+        ),
+        h(
+          'div',
+          { className: 'tr-topbar-actions' },
+          renderPill({
+            dot: endpointInfo.tone,
+            title: endpointInfo.detail,
+            onClick: function () {
+              openSettings('connection');
+            },
+            children: h('span', { className: 'tr-pill-text' }, '端点 · ' + endpointInfo.text),
+          }),
+          hotkeyAvailable
+            ? renderPill({
+                dot: hotkeyInfo.tone,
+                title: hotkeyInfo.detail || '划词翻译：在别的程序里选中文字后按组合键',
+                onClick: function () {
+                  openSettings('quick');
+                },
+                children: [
+                  h('kbd', { key: 'k', className: 'tr-pill-kbd' }, view.triggerCombo || '未设置'),
+                  h('span', { key: 'a', className: 'tr-pill-arrow' }, h(IconArrow)),
+                  h('span', { key: 't', className: 'tr-pill-text' }, effectiveQuickTarget),
+                ],
+              })
+            : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-iconbtn',
+              onClick: function () {
+                openSettings('connection');
+              },
+              title: '设置',
+              'aria-label': '打开设置',
+            },
+            h(IconSettings)
+          )
+        )
+      );
+    }
+
+    function renderLangbar() {
+      return h(
+        'div',
+        { className: 'tr-langbar' },
+        h(
+          'label',
+          { className: 'tr-lang' },
+          h('span', { className: 'tr-lang-label' }, '源语言'),
+          h(
+            'select',
+            {
+              className: 'tr-select',
+              value: effectiveSource,
+              onChange: function (event) {
+                editDraft(SETTING_IDS.sourceLang, event.target.value);
+                saveSettingValue(SETTING_IDS.sourceLang, event.target.value);
+              },
+            },
+            SOURCE_LANGS.map(function (item) {
+              return h('option', { key: item.value, value: item.value }, item.label);
+            })
+          )
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'tr-swap',
+            disabled: effectiveSource === 'auto',
+            title:
+              effectiveSource === 'auto'
+                ? '源语言是「自动」时无法交换（目标语言不能是「自动」）'
+                : '交换源语言与目标语言',
+            'aria-label': '交换源语言与目标语言',
+            onClick: swapLanguages,
+          },
+          h(IconSwap)
+        ),
+        h(
+          'label',
+          { className: 'tr-lang' },
+          h('span', { className: 'tr-lang-label' }, '目标语言'),
+          h(
+            'select',
+            {
+              className: 'tr-select',
+              value: effectiveTarget,
+              onChange: function (event) {
+                editDraft(SETTING_IDS.targetLang, event.target.value);
+                saveSettingValue(SETTING_IDS.targetLang, event.target.value);
+              },
+            },
+            TARGET_LANGS.map(function (lang) {
+              return h('option', { key: lang, value: lang }, lang);
+            })
+          )
+        )
+      );
+    }
+
+    function renderNotice() {
+      if (!notice) return null;
+      return h(
+        'div',
+        { className: 'tr-alert', role: 'alert' },
+        h(
+          'div',
+          { className: 'tr-alert-head' },
+          h('span', { className: 'tr-alert-title' }, notice.title),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-iconbtn tr-iconbtn-sm',
+              'aria-label': '关闭这条错误',
+              onClick: function () {
+                setNotice(null);
+              },
+            },
+            h(IconClose)
+          )
+        ),
+        h('pre', { className: 'tr-pre' }, notice.body),
+        notice.action === 'connection'
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'tr-btn tr-btn-sm tr-alert-action',
+                onClick: function () {
+                  openSettings('connection');
+                },
+              },
+              '打开连接设置'
+            )
+          : notice.action === 'retry'
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'tr-btn tr-btn-sm tr-alert-action',
+                  disabled: busy,
+                  onClick: function () {
+                    translate(input);
+                  },
+                },
+                '重试'
+              )
+            : null
+      );
+    }
+
+    function renderEmptyResult() {
+      return h(
+        'div',
+        { className: 'tr-result-empty' },
+        h(IconEmpty),
+        h('p', { className: 'tr-empty-title' }, modelMissing ? '还没有选择模型' : '还没有译文'),
+        h(
+          'p',
+          { className: 'tr-empty-hint' },
+          modelMissing
+            ? '先连接本机的模型服务，再同步一下模型。'
+            : '把要翻译的文字粘贴到上面，按 Ctrl + Enter，或者点「翻译」。'
+        ),
+        modelMissing
+          ? h(
+              'button',
+              {
+                type: 'button',
+                className: 'tr-btn tr-btn-sm',
+                onClick: function () {
+                  openSettings('connection');
+                },
+              },
+              '去连接'
+            )
+          : null
+      );
+    }
+
+    function renderResult() {
+      if (busy && !result) {
+        return h(
+          'div',
+          { className: 'tr-result-empty' },
+          h(IconSpinner),
+          h('p', { className: 'tr-empty-hint' }, '正在翻译…')
+        );
+      }
+      if (!result) return renderEmptyResult();
+
+      var metaParts = [];
+      if (result.model) metaParts.push(result.model);
+      if (result.at) metaParts.push(formatTime(result.at));
+      if (result.text) metaParts.push(formatCount(result.text.length) + ' 字符');
+      if (result.elapsedMs) metaParts.push(formatDuration(result.elapsedMs));
+
+      var copiedResult = copied === 'result';
+
+      return h(
+        'div',
+        { className: 'tr-result' },
+        h(
+          'div',
+          { className: 'tr-result-head' },
           h(
             'div',
-            { className: 'tr-head-actions' },
+            { className: 'tr-result-heading' },
+            h(
+              'div',
+              { className: 'tr-result-title-row' },
+              h('span', { className: 'tr-result-title' }, '译文'),
+              h('span', { className: 'tr-chip tr-chip-lang' }, result.target || effectiveTarget),
+              result.fromHistory ? h('span', { className: 'tr-chip' }, '历史') : null
+            ),
+            h('span', { className: 'tr-result-meta', title: metaParts.join(' · ') }, metaParts.join(' · '))
+          ),
+          h(
+            'div',
+            { className: 'tr-result-actions' },
             h(
               'button',
               {
                 type: 'button',
-                className: 'tr-btn tr-btn-ghost tr-btn-mini',
+                className: 'tr-btn tr-btn-ghost tr-btn-sm',
+                disabled: !clipboardAvailable,
                 onClick: function () {
-                  refresh().then(function () {
-                    return reloadHistory();
-                  }).then(function () {
-                    flash('已刷新');
-                  });
+                  copyText(result.text, 'result');
                 },
               },
-              '刷新状态与历史'
-            )
+              copiedResult ? h(IconCheck) : h(IconCopy),
+              copiedResult ? '已复制' : '复制'
+            ),
+            result.fromHistory
+              ? null
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'tr-btn tr-btn-ghost tr-btn-sm',
+                    disabled: busy || input.trim() === '',
+                    onClick: function () {
+                      translate(input);
+                    },
+                  },
+                  h(IconRefresh),
+                  '重新翻译'
+                )
           )
         ),
+        h('div', { className: 'tr-result-body' }, result.text)
+      );
+    }
+
+    function renderWork() {
+      return h(
+        'section',
+        { className: 'tr-work', 'aria-label': '翻译工作台' },
+        renderLangbar(),
         h(
-          'p',
-          { className: 'tr-sub' },
-          '一个本机翻译工具：贴一段文字、选两个语言、拿到译文，翻过的东西会留在下面的历史里。',
-          hotkeyAvailable
-            ? h(
-                'span',
-                null,
-                ' 在别的程序里选中文字按 ',
-                h('kbd', null, config.triggerCombo),
-                ' 也能翻（见最下面那一节）。'
-              )
-            : null
-        ),
-
-        // ============================================================
-        // 翻译工作台（主视图）
-        // ============================================================
-        h(
-          'section',
-          { className: 'tr-card tr-card-workspace' },
-          h(
-            'div',
-            { className: 'tr-card-head' },
-            h('h3', { className: 'tr-card-title' }, '翻译'),
-            h(
-              'div',
-              { className: 'tr-row' },
-              h('span', { className: 'tr-count' }, input.length + ' / ' + INPUT_LIMIT),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                  disabled: busy || input === '',
-                  onClick: function () {
-                    setInput('');
-                    setResult(null);
-                  },
-                },
-                '清空'
-              )
-            )
-          ),
-
-          // ---------- 语言 ----------
-          h(
-            'div',
-            { className: 'tr-row tr-row-lang' },
-            h(
-              'label',
-              { className: 'tr-lang' },
-              h('span', { className: 'tr-lang-label' }, '源语言'),
-              h(
-                'select',
-                {
-                  className: 'tr-select tr-select-sm',
-                  value: effectiveSource,
-                  onChange: function (event) {
-                    editDraft(SETTING_IDS.sourceLang, event.target.value);
-                    commit(SETTING_IDS.sourceLang, event.target.value);
-                  },
-                },
-                SOURCE_LANGS.map(function (item) {
-                  return h('option', { key: item.value, value: item.value }, item.label);
-                })
-              )
-            ),
-            h('span', { className: 'tr-arrow' }, '→'),
-            h(
-              'label',
-              { className: 'tr-lang' },
-              h('span', { className: 'tr-lang-label' }, '目标语言'),
-              h(
-                'select',
-                {
-                  className: 'tr-select tr-select-sm',
-                  value: effectiveTarget,
-                  onChange: function (event) {
-                    editDraft(SETTING_IDS.targetLang, event.target.value);
-                    commit(SETTING_IDS.targetLang, event.target.value);
-                  },
-                },
-                TARGET_LANGS.map(function (lang) {
-                  return h('option', { key: lang, value: lang }, lang);
-                })
-              )
-            ),
-            h('span', { className: 'tr-chip-hint' }, '这两项会被记住，下次打开还是它们')
-          ),
-
-          // ---------- 原文 ----------
+          'div',
+          { className: 'tr-editor' },
           h('textarea', {
             className: 'tr-textarea',
             value: input,
             rows: 6,
             maxLength: INPUT_LIMIT,
-            placeholder: '把要翻译的文字粘贴或输入到这里（最多 ' + INPUT_LIMIT + ' 字符）',
+            placeholder: '粘贴或输入要翻译的文字…',
             onChange: function (event) {
               setInput(event.target.value);
             },
             onKeyDown: function (event) {
-              // Ctrl/Cmd + Enter 直接翻 —— 这是工作台里最常用的一条动作，
-              // 而它在多行输入框里不会与"换行"冲突。
               if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
                 event.preventDefault();
                 translate(input);
               }
             },
           }),
-
           h(
             'div',
-            { className: 'tr-row tr-row-between' },
+            { className: 'tr-editor-foot' },
             h(
               'span',
-              { className: 'tr-count' },
-              'Ctrl + Enter 直接翻译 · 模型 ',
-              h('code', null, config.model || '（空）')
+              { className: 'tr-counter' },
+              formatCount(input.length) + ' / ' + formatCount(INPUT_LIMIT)
+            ),
+            h('span', { className: 'tr-kbd-hint' }, 'Ctrl + Enter 翻译')
+          )
+        ),
+        h(
+          'div',
+          { className: 'tr-toolbar' },
+          h(
+            'div',
+            { className: 'tr-toolbar-left' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'tr-btn tr-btn-ghost tr-btn-sm',
+                disabled: busy || input === '',
+                onClick: function () {
+                  setInput('');
+                  setResult(null);
+                  setNotice(null);
+                },
+              },
+              '清空'
             ),
             h(
               'button',
               {
                 type: 'button',
-                className: 'tr-btn tr-btn-primary tr-btn-lg',
-                disabled: busy || input.trim() === '',
+                className: 'tr-btn tr-btn-ghost tr-btn-sm',
+                disabled: busy || !result,
                 onClick: function () {
-                  translate(input);
+                  setResult(null);
                 },
               },
-              busy ? '翻译中…' : '翻译'
+              '收起译文'
             )
           ),
-
-          // ---------- 译文 ----------
-          result
-            ? h(
-                'div',
-                { className: 'tr-workspace-result' },
-                h(
-                  'div',
-                  { className: 'tr-card-head' },
-                  h(
-                    'h3',
-                    { className: 'tr-card-title' },
-                    '译文 → ' + result.target + (result.sourceLang && result.sourceLang !== 'auto' ? '（从 ' + result.sourceLang + '）' : '')
-                  ),
-                  h(
-                    'div',
-                    { className: 'tr-row' },
-                    h('span', { className: 'tr-time' }, formatTime(result.at)),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                        disabled: !clipboardAvailable,
-                        title: clipboardAvailable ? '' : '这个运行位置没有剪贴板写入能力',
-                        onClick: function () {
-                          copyText(result.text);
-                        },
-                      },
-                      '复制译文'
-                    )
-                  )
-                ),
-                // **只作为文本渲染**：译文来自模型，模型可能把它拼成任何东西。
-                h('div', { className: 'tr-result-text' }, result.text)
-              )
-            : h(
-                'div',
-                { className: 'tr-empty' },
-                '还没有译文。输入一段文字，然后点「翻译」或者按 Ctrl + Enter。'
-              )
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-btn tr-btn-primary',
+              disabled: busy || input.trim() === '',
+              onClick: function () {
+                translate(input);
+              },
+            },
+            busy ? IconSpinner() : null,
+            busy ? '翻译中…' : '翻译'
+          )
         ),
+        renderNotice(),
+        renderResult()
+      );
+    }
 
-        // ============================================================
-        // 提示 / 错误
-        // ============================================================
-        notice
-          ? h(
-              'div',
-              { className: 'tr-banner tr-banner-' + notice.tone },
-              h('strong', null, notice.title),
-              notice.body ? h('pre', { className: 'tr-pre' }, notice.body) : null
-            )
-          : null,
+    function renderHistoryItem(entry) {
+      var key = String(entry.id);
+      var active = selectedId === key;
+      var copiedKey = 'hist-' + key;
+      var deleteKey = 'delete-' + key;
+      var deleting = confirm === deleteKey;
 
-        dbError
-          ? h(
-              'div',
-              { className: 'tr-banner tr-banner-warn' },
-              h('strong', null, '翻译历史'),
-              h('span', null, ' ' + dbError)
-            )
-          : null,
-
-        // ============================================================
-        // 历史
-        // ============================================================
+      return h(
+        'article',
+        {
+          key: key,
+          className: 'tr-hist-item' + (active ? ' tr-hist-item-on' : ''),
+          role: 'button',
+          tabIndex: 0,
+          'aria-label': '打开这条译文',
+          onClick: function () {
+            openEntry(entry);
+          },
+          onKeyDown: function (event) {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              openEntry(entry);
+            }
+          },
+        },
         h(
-          'section',
-          { className: 'tr-card' },
+          'div',
+          { className: 'tr-hist-meta' },
+          entry.pinned ? h('span', { className: 'tr-pin', title: '已置顶' }, h(IconPin)) : null,
+          h('span', { className: 'tr-hist-time' }, formatTime(entry.at)),
+          h(
+            'span',
+            { className: 'tr-hist-lang' },
+            (entry.sourceLang && entry.sourceLang !== 'auto' ? entry.sourceLang + ' → ' : '') +
+              entry.targetLang
+          ),
+          h('span', { className: 'tr-hist-chars' }, formatCount(entry.bodyChars) + ' 字')
+        ),
+        h('p', { className: 'tr-hist-preview' }, entry.preview),
+        h(
+          'div',
+          {
+            className: 'tr-hist-actions',
+            onClick: function (event) {
+              event.stopPropagation();
+            },
+            onKeyDown: function (event) {
+              event.stopPropagation();
+            },
+          },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-iconbtn tr-iconbtn-sm',
+              title: '复制这条译文',
+              'aria-label': '复制这条译文',
+              onClick: function () {
+                readBody(entry.id).then(
+                  function (body) {
+                    copyText(body || entry.preview, copiedKey);
+                  },
+                  function (error) {
+                    setNotice({ title: '读这条历史失败', body: messageOf(error) });
+                  }
+                );
+              },
+            },
+            copied === copiedKey ? h(IconCheck) : h(IconCopy)
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-iconbtn tr-iconbtn-sm' + (entry.pinned ? ' tr-iconbtn-on' : ''),
+              title: entry.pinned ? '取消置顶' : '置顶（不被自动清理）',
+              'aria-label': entry.pinned ? '取消置顶' : '置顶',
+              onClick: function () {
+                togglePin(entry);
+              },
+            },
+            h(IconPin)
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className:
+                'tr-iconbtn tr-iconbtn-sm' + (deleting ? ' tr-iconbtn-danger' : ''),
+              title: deleting ? '再点一次确认删除' : '删除',
+              'aria-label': deleting ? '确认删除这条历史' : '删除这条历史',
+              onClick: function () {
+                if (deleting) removeEntry(entry.id);
+                else askConfirm(deleteKey);
+              },
+            },
+            h(IconTrash)
+          )
+        )
+      );
+    }
+
+    function renderHistory() {
+      var query = search.trim();
+      return h(
+        'aside',
+        { className: 'tr-hist', 'aria-label': '翻译历史' },
+        h(
+          'div',
+          { className: 'tr-hist-head' },
           h(
             'div',
-            { className: 'tr-card-head' },
-            h('h3', { className: 'tr-card-title' }, '翻译历史'),
+            { className: 'tr-hist-title-row' },
+            h('h2', { className: 'tr-hist-title' }, '历史'),
             h(
               'div',
-              { className: 'tr-row' },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                  disabled: historyBusy || !databaseAvailable(),
-                  onClick: function () {
-                    reloadHistory();
+              { className: 'tr-chips', role: 'group', 'aria-label': '筛选历史' },
+              [
+                { id: 'all', label: '全部' },
+                { id: 'pinned', label: '置顶' },
+              ].map(function (item) {
+                var on = filter === item.id;
+                return h(
+                  'button',
+                  {
+                    key: item.id,
+                    type: 'button',
+                    className: 'tr-chip tr-chip-btn' + (on ? ' tr-chip-on' : ''),
+                    'aria-pressed': on,
+                    onClick: function () {
+                      if (filter === item.id) return;
+                      setFilter(item.id);
+                    },
                   },
-                },
-                historyBusy ? '读取中…' : '刷新'
-              ),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                  disabled: !databaseAvailable() || (stats && stats.entries === 0),
-                  title: '只删未置顶的条目',
-                  onClick: function () {
-                    clearHistory(false);
-                  },
-                },
-                '清空未置顶'
-              ),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                  disabled: !databaseAvailable() || (stats && stats.entries === 0),
-                  title: '连置顶的条目一起删',
-                  onClick: function () {
-                    clearHistory(true);
-                  },
-                },
-                '全部清空'
-              )
+                  item.label
+                );
+              })
             )
           ),
-
           h(
             'div',
-            { className: 'tr-row' },
+            { className: 'tr-search' },
+            h('span', { className: 'tr-search-icon' }, h(IconSearch)),
             h('input', {
-              className: 'tr-input tr-input-flex',
+              className: 'tr-search-input',
               type: 'search',
               value: search,
-              placeholder: '搜索译文全文（不是只搜预览的前 200 字符）',
+              placeholder: '搜索译文',
+              'aria-label': '搜索译文',
               onChange: function (event) {
                 setSearch(event.target.value);
               },
-              onKeyDown: function (event) {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  reloadHistory();
-                }
-              },
             }),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'tr-btn tr-btn-ghost',
-                disabled: historyBusy || !databaseAvailable(),
-                onClick: function () {
-                  reloadHistory();
-                },
-              },
-              '搜索'
-            ),
             search
               ? h(
                   'button',
                   {
                     type: 'button',
-                    className: 'tr-btn tr-btn-ghost tr-btn-mini',
+                    className: 'tr-search-clear',
+                    'aria-label': '清除搜索',
                     onClick: function () {
                       setSearch('');
-                      reloadHistory('');
                     },
                   },
-                  '清除搜索'
+                  h(IconClose)
                 )
               : null
-          ),
-
-          h(
-            'p',
-            { className: 'tr-note' },
-            '保留策略：未置顶的条目最多 ' +
-              MAX_ENTRIES +
-              ' 条、最多 ' +
-              MAX_AGE_DAYS +
-              ' 天（超出之后从最旧的开始删）；**置顶的条目不计入这两个数、也不会被它们删掉**，但译文总量超过 ' +
-              Math.round(MAX_BODY_CHARS / 10000) +
-              ' 万字符的硬顶时，最旧的条目（包括置顶的）会被删。'
-          ),
-
-          entries.length === 0
-            ? h(
-                'p',
-                { className: 'tr-empty' },
-                search ? '没有匹配的条目。' : '还没有翻译记录。上面翻一段就会出现在这里。'
-              )
-            : h(
-                'ul',
-                { className: 'tr-history' },
-                entries.map(function (entry) {
-                  return h(
-                    'li',
-                    { key: String(entry.id), className: 'tr-history-item' },
-                    h(
-                      'div',
-                      { className: 'tr-history-head' },
-                      entry.pinned
-                        ? h('span', { className: 'tr-tag tr-tag-pin' }, '置顶')
-                        : null,
-                      h(
-                        'span',
-                        { className: 'tr-time' },
-                        formatTime(entry.at) +
-                          ' · ' +
-                          (entry.sourceLang && entry.sourceLang !== 'auto' ? entry.sourceLang + ' → ' : '') +
-                          entry.targetLang
-                      ),
-                      h(
-                        'div',
-                        { className: 'tr-history-actions' },
-                        h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                            onClick: function () {
-                              openHistoryEntry(entry);
-                            },
-                          },
-                          '打开'
-                        ),
-                        h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                            onClick: function () {
-                              readBody(entry.id).then(
-                                function (body) {
-                                  copyText(body || entry.preview);
-                                },
-                                function (error) {
-                                  setNotice({ tone: 'error', title: '读这条历史失败', body: messageOf(error) });
-                                }
-                              );
-                            },
-                          },
-                          '复制'
-                        ),
-                        h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                            title: '置顶的条目不会被自动清理（除非总量撞上硬顶）',
-                            onClick: function () {
-                              togglePin(entry);
-                            },
-                          },
-                          entry.pinned ? '取消置顶' : '置顶'
-                        ),
-                        h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                            onClick: function () {
-                              removeHistoryEntry(entry.id);
-                            },
-                          },
-                          '删除'
-                        )
-                      )
-                    ),
-                    // **只作为文本渲染**。预览来自模型，绝不拼进标记。
-                    h('div', { className: 'tr-history-text' }, entry.preview),
-                    openEntry && openEntry.id === entry.id
-                      ? h('div', { className: 'tr-open' }, h('div', { className: 'tr-history-text' }, openEntry.text))
-                      : null,
-                    h(
-                      'div',
-                      { className: 'tr-history-foot' },
-                      h('span', { className: 'tr-time' }, entry.model),
-                      h(
-                        'span',
-                        { className: 'tr-time' },
-                        '原文 ' + entry.srcChars + ' 字符 · 译文 ' + entry.bodyChars + ' 字符'
-                      )
-                    )
-                  );
-                })
-              ),
-
-          hasMore
+          )
+        ),
+        h(
+          'div',
+          { className: 'tr-hist-list' },
+          dbError
             ? h(
                 'div',
-                { className: 'tr-row' },
+                { className: 'tr-hist-error', role: 'alert' },
+                h('span', null, dbError),
                 h(
                   'button',
                   {
                     type: 'button',
-                    className: 'tr-btn tr-btn-ghost',
-                    disabled: historyBusy,
-                    onClick: loadMore,
-                  },
-                  historyBusy ? '加载中…' : '加载更多'
-                )
-              )
-            : null,
-
-          h(
-            'p',
-            { className: 'tr-note' },
-            '⚠️ 热键翻出来的译文**不会**出现在这里：那一半跑在另一个进程里，而数据库由这一屏写（把"要不要留档"的决定交给一次按键太轻率）。'
-          )
-        ),
-
-        // ============================================================
-        // 统计
-        // ============================================================
-        h(
-          'section',
-          { className: 'tr-card' },
-          h('h3', { className: 'tr-card-title' }, '统计'),
-          stats
-            ? h(
-                'div',
-                { className: 'tr-stats' },
-                h(StatCell, { label: '条目', value: String(stats.entries) }),
-                h(StatCell, { label: '置顶', value: String(stats.pinned) }),
-                h(StatCell, { label: '译文总量', value: stats.bodyChars + ' 字符' }),
-                h(StatCell, { label: '数据库文件', value: formatBytes(stats.dbBytes) })
-              )
-            : h('p', { className: 'tr-empty' }, '还没有读到统计数据。'),
-          h(
-            'p',
-            { className: 'tr-note' },
-            '「数据库文件」是 `PRAGMA page_count × page_size` 的结果 —— `ctx.db` 没有大小查询接口，而宿主给这个数据库的**页数上限**是插件数据配额的一半（' +
-              '见宿主 `plugins/db.rs`）。它包含索引本身，因此略大于译文总量。'
-          )
-        ),
-
-        // ============================================================
-        // 模型与端点
-        // ============================================================
-        h(
-          'section',
-          { className: 'tr-card' },
-          h(
-            'div',
-            { className: 'tr-card-head' },
-            h('h3', { className: 'tr-card-title' }, '模型与端点'),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                disabled: syncing,
-                onClick: runSync,
-              },
-              syncing ? '同步中…' : '同步模型'
-            )
-          ),
-          h(
-            'p',
-            { className: 'tr-note' },
-            '往 ',
-            h('code', null, joinUrl(view.baseUrl, 'models')),
-            ' 发一次 GET，把服务端实际加载的模型读回来。'
-          ),
-          cache
-            ? h(
-                'div',
-                { className: 'tr-cache' },
-                h(
-                  'div',
-                  { className: 'tr-cache-line' },
-                  cache.ok
-                    ? h('span', { className: 'tr-tag tr-tag-ok' }, '上次探测成功')
-                    : h('span', { className: 'tr-tag tr-tag-error' }, '上次探测失败'),
-                  h(
-                    'span',
-                    { className: 'tr-time' },
-                    formatTime(cache.at) + '（' + formatAgo(cache.at) + '）'
-                  ),
-                  cache.base ? h('span', { className: 'tr-time' }, ' · ' + cache.base) : null
-                ),
-                cache.ok && Array.isArray(cache.models) && cache.models.length > 0
-                  ? h(
-                      'div',
-                      { className: 'tr-models' },
-                      cache.models.map(function (id) {
-                        var selected = id === config.model;
-                        return h(
-                          'button',
-                          {
-                            key: id,
-                            type: 'button',
-                            className: 'tr-model' + (selected ? ' tr-model-on' : ''),
-                            onClick: function () {
-                              commit(SETTING_IDS.model, id);
-                            },
-                          },
-                          id
-                        );
-                      })
-                    )
-                  : h('pre', { className: 'tr-pre' }, cache.error || '（没有可用的模型列表）')
-              )
-            : h(
-                'div',
-                { className: 'tr-cache' },
-                h(
-                  'p',
-                  { className: 'tr-note' },
-                  '还没有探测过。点一次「同步模型」—— 它同时也是"服务在不在"的测试。'
-                )
-              ),
-
-          h(
-            Field,
-            {
-              label: '模型服务地址（base URL）',
-              hint:
-                '结尾带不带斜杠都行。本机默认 ' +
-                DEFAULT_BASE_URL +
-                '。' +
-                (view.baseUrl && !isLoopback(view.baseUrl)
-                  ? ' ⚠ 这不是本机回环地址 —— 除了 network 权限之外还要声明 network-external，否则请求会被宿主拒绝。'
-                  : ''),
-            },
-            h('input', {
-              className: 'tr-input',
-              type: 'text',
-              value: view.baseUrl,
-              onChange: function (event) {
-                editDraft(SETTING_IDS.baseUrl, event.target.value);
-              },
-              onBlur: function () {
-                commit(SETTING_IDS.baseUrl, view.baseUrl.trim());
-              },
-            })
-          ),
-
-          h(
-            Field,
-            {
-              label: '接口形态',
-              hint:
-                'chat 走 /chat/completions，completion 走 /completions。有些 llama.cpp 构建在 chat 那一侧不稳，换 completion 试试。',
-            },
-            h(
-              'select',
-              {
-                className: 'tr-select',
-                value: view.endpointKind,
-                onChange: function (event) {
-                  editDraft(SETTING_IDS.endpointKind, event.target.value);
-                  commit(SETTING_IDS.endpointKind, event.target.value);
-                },
-              },
-              h('option', { value: 'chat' }, 'chat（/chat/completions）'),
-              h('option', { value: 'completion' }, 'completion（/completions）')
-            )
-          ),
-
-          h(
-            Field,
-            {
-              label: '模型',
-              hint: '请求体里的 model 字段，必须与服务端加载的那一个逐字一致。建议用上面的「同步模型」而不是手打。',
-            },
-            h('input', {
-              className: 'tr-input',
-              type: 'text',
-              value: view.model,
-              onChange: function (event) {
-                editDraft(SETTING_IDS.model, event.target.value);
-              },
-              onBlur: function () {
-                commit(SETTING_IDS.model, view.model.trim());
-              },
-            })
-          ),
-
-          h(
-            Field,
-            {
-              label: '提示词模板',
-              hint:
-                '占位符：{text}（必需、**最后**替换）、{target}、{source}。本地小模型的译文质量对格式极其敏感，因此这里是可改的 —— 一个写死的模板等于"只在作者那一个模型上能用"。',
-            },
-            h(
-              'div',
-              null,
-              h('textarea', {
-                className: 'tr-textarea tr-textarea-mono',
-                value: view.promptTemplate,
-                rows: 6,
-                onChange: function (event) {
-                  editDraft(SETTING_IDS.promptTemplate, event.target.value);
-                },
-                onBlur: function () {
-                  commit(SETTING_IDS.promptTemplate, view.promptTemplate);
-                },
-              }),
-              h(
-                'div',
-                { className: 'tr-row' },
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'tr-btn tr-btn-ghost tr-btn-mini',
+                    className: 'tr-iconbtn tr-iconbtn-sm',
+                    'aria-label': '关闭这条提示',
                     onClick: function () {
-                      editDraft(SETTING_IDS.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
-                      commit(SETTING_IDS.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
+                      setDbError('');
                     },
                   },
-                  '恢复缺省模板'
-                ),
-                h('span', { className: 'tr-chip-hint' }, '当前源语言替换后的 {source} 是：' + (effectiveSource === 'auto' ? SOURCE_AUTO_HINT : effectiveSource))
-              ),
-              h(
-                'p',
-                { className: 'tr-note' },
-                '用通用小模型时把指令换成英文往往更稳，例如 Translate the following text into {target}. Output only the translation.'
-              )
-            )
-          )
-        ),
-
-        // ============================================================
-        // 热键流程（单独一节，默认收起）
-        // ============================================================
-        h(
-          'section',
-          { className: 'tr-card' },
-          h(
-            'div',
-            { className: 'tr-card-head' },
-            h('h3', { className: 'tr-card-title' }, '划词热键流程'),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'tr-btn tr-btn-ghost tr-btn-mini',
-                onClick: function () {
-                  setHotkeyOpen(!hotkeyOpen);
-                },
-              },
-              hotkeyOpen ? '收起' : '展开'
-            )
-          ),
-          h(
-            'p',
-            { className: 'tr-note' },
-            '这一节是**可选**的：在别的程序里选中文字，按一下组合键，光标旁边弹出一张译文卡片。它需要 Node 运行时（后台进程）与 Windows，而上面的翻译工作台两样都不需要。'
-          ),
-
-          // 状态行：热键与端点。收起来时也显示 —— 它是"这一节能不能用"的答案。
-          h(
-            'div',
-            { className: 'tr-status' },
-            h(StatusRow, {
-              label: '热键',
-              value: hotkeyLine.value,
-              tone: hotkeyLine.tone,
-              detail: hotkeyLine.detail,
-            }),
-            h(StatusRow, {
-              label: '端点',
-              value: endpointLine.value,
-              tone: endpointLine.tone,
-              detail: endpointLine.detail,
-            }),
-            h(StatusRow, {
-              label: '后台',
-              value: status && status.at ? '上报于 ' + formatAgo(status.at) : '还没有上报',
-              tone: status && status.at ? 'ok' : 'warn',
-              detail: '后台进程写状态、这一屏读它。没有推送通道，因此它可能是上一次打开时的快照',
-            })
-          ),
-
-          !hotkeyAvailable || !selectionAvailable
-            ? h(
-                'div',
-                { className: 'tr-banner tr-banner-warn' },
-                h('strong', null, '热键流程在这个平台上不可用。'),
-                h(
-                  'span',
-                  null,
-                  ' 全局热键（RegisterHotKey）与读取选中文本（SendInput）都只在 Windows 上存在' +
-                    (hotkeyAvailable ? '' : '；这里 ctx.hotkey.isAvailable() 是 false') +
-                    (selectionAvailable ? '' : '；这里 ctx.selection.isAvailable() 是 false') +
-                    '。上面的翻译工作台照常能用。'
+                  h(IconClose)
                 )
               )
             : null,
-
-          hotkeyOpen
-            ? h(
-                'div',
-                { className: 'tr-hotkey-body' },
-                h(Field, {
-                  label: '触发组合键',
-                  hint:
-                    '点一下右边的方框，然后按下你要的组合键（不用手写）。只按功能键（F1..F24）或按住 Ctrl / Alt / Shift 中的至少一个 —— 单个普通键在这里会被拒绝，因为全局热键是独占的，它会把这个键从整台机器上所有程序里拿走。改完最多一分钟生效 —— 后台每 60 秒对一次账，因为那里没有设置变更回调。组合键在系统里是独占的，冲突时错误会点名是谁占着。',
-                }, h(HotkeyRecorder, {
-                  combo: view.triggerCombo,
-                  onCommit: function (combo) {
-                    // 先写草稿再落盘：`commit` 会按服务端实际值回读一次，而回读
-                    // 发生在它内部，因此这里必须先把草稿改成新的值（与上面那些
-                    // 输入框同一条路径，不另开一套保存逻辑）。
-                    editDraft(SETTING_IDS.triggerCombo, combo);
-                    return commit(SETTING_IDS.triggerCombo, combo);
-                  },
-                  onClear: function () {
-                    editDraft(SETTING_IDS.triggerCombo, '');
-                    return commit(SETTING_IDS.triggerCombo, '');
-                  },
-                  onNotice: setNotice,
-                })),
-
-                h(
-                  'div',
-                  { className: 'tr-sub-card' },
-                  h('h4', { className: 'tr-sub-title' }, 'API key'),
-                  h(
-                    'p',
-                    { className: 'tr-note' },
-                    '它不存在设置里，也不存在插件的任何文件里：写进 ctx.secrets 之后，密文落在插件数据目录之外，由本机硬件指纹派生的密钥加密，而且不属于任何备份类别。代价写在这里：换机器（或换网卡、改主机名）之后解不开 —— 那时后台会原样告诉你"密文仍在磁盘上、没有被删除"，重新输入一次即可。'
-                  ),
-                  h(
-                    'div',
-                    { className: 'tr-key-state' },
-                    keyInfo.known && keyInfo.present
-                      ? h('span', { className: 'tr-tag tr-tag-ok' }, '已保存（加密）')
-                      : h('span', { className: 'tr-tag tr-tag-muted' }, '未设置'),
-                    keyInfo.error ? h('span', { className: 'tr-tag tr-tag-error' }, keyInfo.error) : null,
-                    h('span', { className: 'tr-time' }, '本地 llama.cpp 的 server 默认不校验密钥，因此留空也能用')
-                  ),
-                  h(
-                    'div',
-                    { className: 'tr-row' },
-                    h('input', {
-                      className: 'tr-input tr-input-flex',
-                      // **`type="password"`，而且 `value` 永远是空的**：把已保存的密钥
-                      // 作为 value 渲染等于把它放进一个可以被截图、被开发者工具读出来的
-                      // 地方。输入框只负责**写入**，从不负责回显。
-                      type: 'password',
-                      value: keyDraft,
-                      autoComplete: 'off',
-                      spellCheck: false,
-                      placeholder: keyInfo.present ? '已保存（留空并点删除可清除）' : 'sk-local 一类（本机服务通常随便填）',
-                      onChange: function (event) {
-                        setKeyDraft(event.target.value);
-                      },
-                      onKeyDown: function (event) {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          commitKey();
-                        }
-                      },
-                    }),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'tr-btn tr-btn-primary',
-                        disabled: keyDraft === '',
-                        onClick: commitKey,
-                      },
-                      '保存密钥'
-                    ),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'tr-btn tr-btn-ghost',
-                        disabled: !keyInfo.present,
-                        onClick: function () {
-                          if (!ctx.secrets || typeof ctx.secrets.delete !== 'function') return;
-                          ctx.secrets.delete(SECRET_API_KEY).then(
-                            function () {
-                              flash('API key 已删除');
-                              return refresh();
-                            },
-                            function (error) {
-                              setNotice({ tone: 'error', title: '删除失败', body: messageOf(error) });
-                            }
-                          );
-                        },
-                      },
-                      '删除'
-                    )
-                  )
+          historyBusy && entries.length === 0
+            ? h('p', { className: 'tr-hist-empty' }, '读取中…')
+            : entries.length === 0
+              ? h(
+                  'p',
+                  { className: 'tr-hist-empty' },
+                  query
+                    ? '没有匹配「' + query + '」的译文'
+                    : filter === 'pinned'
+                      ? '还没有置顶的译文'
+                      : '翻一段，这里就会留下记录'
                 )
+              : entries.map(renderHistoryItem)
+        ),
+        h(
+          'div',
+          { className: 'tr-hist-foot' },
+          h(
+            'span',
+            { className: 'tr-hist-stat' },
+            stats
+              ? formatCount(stats.entries) +
+                  ' 条' +
+                  (stats.pinned > 0 ? ' · 置顶 ' + formatCount(stats.pinned) : '') +
+                  ' · ' +
+                  formatBytes(stats.dbBytes)
+              : ''
+          ),
+          hasMore
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'tr-btn tr-btn-ghost tr-btn-sm',
+                  disabled: historyBusy,
+                  onClick: loadMore,
+                },
+                historyBusy ? '加载中…' : '加载更多'
               )
             : null
-        ),
-
-        saveFlash ? h('div', { className: 'tr-flash' }, saveFlash) : null,
-
-        h(
-          'p',
-          { className: 'tr-footnote' },
-          '权限：storage（设置与后台状态）、plugin-data（翻译历史，也就是下面的 ctx.db）、network（只在 ' +
-            DEFAULT_BASE_URL +
-            ' 这类本机地址上，远端地址还需要 network-external）、notification（结果卡片）、clipboard（把译文放回剪贴板）、secrets（API key）、global-hotkey 与 read-selection（热键与读选中文本，都只有 Windows 上有）。'
         )
-      )
-    );
-  }
-
-  // ============================================================
-  // 小组件
-  // ============================================================
-
-  function StatusRow(props) {
-    return h(
-      'div',
-      { className: 'tr-status-row' },
-      h('span', { className: 'tr-status-label' }, props.label),
-      h('span', { className: 'tr-status-value tr-status-' + props.tone }, props.value),
-      props.detail ? h('span', { className: 'tr-status-detail' }, props.detail) : null
-    );
-  }
-
-  function Field(props) {
-    return h(
-      'div',
-      { className: 'tr-field' },
-      h('label', { className: 'tr-field-label' }, props.label),
-      props.hint ? h('p', { className: 'tr-field-hint' }, props.hint) : null,
-      props.children
-    );
-  }
-
-  // ============================================================
-  // 录制式组合键控件
-  // ============================================================
-  //
-  // ============================================================
-  // 为什么是"按一下"而不是"打一行字"
-  // ============================================================
-  //
-  // 上一版这里是一个 `type="text"` 输入框，让用户**手写** `mod+k` 这一串。那有三个
-  // 具体的问题，而且都不是美观问题：
-  //
-  //   1. **用户要猜。** 语法只存在于文档与代码里（见上面"组合键"那一节），而输入框
-  //      没有任何东西告诉他 `Ctrl+K` 与 `mod+k` 是同一个键、`shift+mod+tab` 与
-  //      `mod+shift+tab` 也一样。写错的代价不是一句报错，而是"改完最多一分钟生效"
-  //      之后一次静默的注册失败。
-  //   2. **写出来的是字符串，按下去的是键。** 用户以为他填的是"我按的那个组合"，
-  //      实际填的是一个需要与后台解析器逐字对上的字符串 —— 这两者之间每一处不一致
-  //      都表现为"这个热键没反应"。
-  //   3. **边界全都要靠他记住。** 宿主拒绝裸的非功能键（那会把那个键从整台机器上
-  //      拿走，见 `hotkey.rs::key_may_be_bare`）。输入框对此一无所知，只能等注册失败。
-  //
-  // 录制控件把这三件事都收回到控件自己身上：用户**按**他要的组合，控件负责把它
-  // 变成合法字符串，并在它不合法时立刻说清为什么。
-  //
-  // ============================================================
-  // 录制期间必须**吃掉**这次按键
-  // ============================================================
-  //
-  // `preventDefault()` + `stopPropagation()` 不是可选的：少一个都可能让这次按键
-  // 顺着宿主界面跑下去（宿主自己有一批 `Ctrl+K` 一类的快捷键），而那会变成
-  // "我按组合键时面板里别的东西也动了"。这里连 `keyCode` 都不去动 —— 只读。
-  function HotkeyRecorder(props) {
-    var recordingState = React.useState(false);
-    var recording = recordingState[0];
-    var setRecording = recordingState[1];
-
-    var previewState = React.useState('');
-    var preview = previewState[0];
-    var setPreview = previewState[1];
-
-    var messageState = React.useState('');
-    var message = messageState[0];
-    var setMessage = messageState[1];
-
-    // 组合键在设置里归一化之后的形态（空 = 没有绑定）。
-    var bound = canonicalCombo(props.combo);
-    // 保存一次之后就不再收键。少了它，`commit` 是异步的，用户在等的时候再按一下
-    // 就会叠上第二次保存（并且第二次是对着一个还没刷新的值）。
-    var finishedRef = React.useRef(false);
-    // 第几次录制。保存是异步的，而用户可能在它回来之前就取消了（Esc / 点别处 /
-    // 点了「清除绑定」）—— 那一次保存的成功回调**不许**再回来把控件改回静止态，
-    // 否则界面上显示的会是"已经录好了"，而用户刚刚明确说了不要它。
-    var sessionRef = React.useRef(0);
-
-    function stopRecording() {
-      setRecording(false);
-      setPreview('');
-    }
-
-    /** 开始录制。**清掉上一次的提示**：它是上一次的事实，留着会误导。 */
-    function begin() {
-      sessionRef.current += 1;
-      finishedRef.current = false;
-      setMessage('');
-      setPreview('');
-      setRecording(true);
-    }
-
-    /** Escape（不带修饰符）取消录制并把原来的值原样留着 —— 不落盘任何东西。 */
-    function cancel() {
-      sessionRef.current += 1;
-      finishedRef.current = true;
-      stopRecording();
-      setMessage('');
-      props.onNotice({
-        tone: 'info',
-        title: '已取消录制',
-        body: '组合键没有被改动（还是「' + (bound || '未设置') + '」）。',
-      });
-    }
-
-    function onKeyDown(event) {
-      if (!recording || finishedRef.current) return;
-
-      // 录制期间**任何**按键都不许再往下走：宿主界面上挂着自己的快捷键，
-      // 而用户此刻的意图是"在这个控件里按一个组合"。
-      event.preventDefault();
-      event.stopPropagation();
-
-      // 只按下修饰键时继续等：`Ctrl` 本身不是一个绑定，而把它当成"录好了"
-      // 会让用户永远录不出 `Ctrl+K`（他按下 Ctrl 的那一刻录制就结束了）。
-      if (isLoneModifierKey(event)) {
-        setPreview(comboPreview(event));
-        return;
-      }
-
-      // 不带修饰符的 Escape = 取消。带修饰符的 Escape 是一个**合法**的组合
-      // （`accelerator` 认 `escape`），因此它照常被录下来。
-      if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-        cancel();
-        return;
-      }
-
-      var key = hotkeyKeyName(event.key);
-      if (key === '') {
-        // 认不出的键**不猜**：把它记成别的键会让用户"按了 A、绑成了 B"。
-        setPreview(comboPreview(event));
-        setMessage('这个键不能用作组合键。可用的是单个字母 / 数字、F1..F24，以及 ' +
-          'Backspace / Tab / Enter / Escape / Space / PageUp / PageDown / Home / End / ' +
-          '方向键 / Insert / Delete。');
-        return;
-      }
-
-      var combo = comboFromEvent(event);
-      if (combo === null) {
-        // 到这里只可能是"一个修饰符都没有、而主键又不是功能键"。把宿主那句话
-        // 抄给用户 —— 这是他在保存之前唯一能改主意的时刻。
-        setPreview(comboPreview(event));
-        setMessage('单个普通键不能做全局热键：那会把这个键从「整台机器」上所有程序里' +
-          '拿走（用户在任何一个程序里都打不出它）。请按住 Ctrl / Alt / Shift 中的至少一个' +
-          '再按这个键，或者改用 F1..F24。');
-        return;
-      }
-
-      finishedRef.current = true;
-      setPreview(comboPreview(event));
-
-      // 从这里起，"这一下按键算不算数"由保存的结果回答。**因此在结果回来之前
-      // 不收尾**：立刻把控件切回静止态会让用户以为录好了，而设置其实没写成。
-      setMessage('正在保存 ' + combo + '…');
-
-      var session = sessionRef.current;
-      var outcome = props.onCommit(combo);
-      if (!outcome || typeof outcome.then !== 'function') {
-        finishSuccess(session);
-        return;
-      }
-      outcome.then(
-        function () {
-          finishSuccess(session);
-        },
-        function () {
-          // 失败（或这个运行位置没有 ctx.settings）时留在录制态，并把刚才那一下
-          // 显示出来：用户再按一次就是重录。**不接受这个组合**，因为宿主也没接受。
-          if (sessionRef.current !== session) return;
-          finishedRef.current = false;
-          setMessage('没有保存。请再按一个组合键，或者按 Esc 取消。');
-        }
       );
     }
 
-    function finishSuccess(session) {
-      if (sessionRef.current !== session) return;
-      finishedRef.current = true;
-      stopRecording();
-      setMessage('');
+    // ---------- 抽屉 ----------
+
+    function renderDrawerTabs() {
+      var tabs = [
+        { id: 'connection', label: '连接' },
+        { id: 'prompt', label: '提示词' },
+        { id: 'quick', label: '划词' },
+        { id: 'data', label: '数据' },
+      ];
+      return h(
+        'div',
+        { className: 'tr-tabs', role: 'tablist', 'aria-label': '设置分类' },
+        tabs.map(function (tab) {
+          var on = drawerTab === tab.id;
+          return h(
+            'button',
+            {
+              key: tab.id,
+              type: 'button',
+              role: 'tab',
+              'aria-selected': on,
+              className: 'tr-tab' + (on ? ' tr-tab-on' : ''),
+              onClick: function () {
+                setDrawerTab(tab.id);
+              },
+            },
+            tab.label
+          );
+        })
+      );
     }
 
-    var label = bound === '' ? '未设置' : bound;
-    var shown = recording ? '请按下组合键…' : label;
+    function renderConnectionSection() {
+      var models = cache && cache.ok && Array.isArray(cache.models) ? cache.models : [];
+      var probe = describeEndpoint(cache, status);
 
-    var button = h(
-      'button',
-      {
-        type: 'button',
-        className: 'tr-recorder' + (recording ? ' tr-recorder-on' : ''),
-        // 录制时把焦点留在自己身上：失焦会走到下面的 onBlur 分支，而用户点一下
-        // 别处本来也确实该取消 —— 两种情况语义一致。
-        onBlur: function () {
-          if (recording) cancel();
-        },
-        onClick: function () {
-          if (recording) cancel();
-          else begin();
-        },
-        onKeyDown: onKeyDown,
-        'aria-label': '触发组合键：' + label,
-        'aria-pressed': recording ? 'true' : 'false',
-        disabled: props.disabled === true,
-      },
-      h(
-        'span',
-        { className: 'tr-recorder-value' + (bound === '' && !recording ? ' tr-recorder-empty' : '') },
-        shown
-      ),
-      recording
-        ? h('span', { className: 'tr-recorder-wait' }, preview ? preview : '等待按键…')
-        : h('span', { className: 'tr-recorder-hint' }, '点击后按下组合键')
-    );
+      return h(
+        'section',
+        { className: 'tr-sect' },
+        h(
+          'div',
+          { className: 'tr-sect-head' },
+          h('h3', { className: 'tr-sect-title' }, '模型服务'),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-btn tr-btn-ghost tr-btn-sm',
+              disabled: syncing,
+              onClick: runSync,
+            },
+            syncing ? IconSpinner() : h(IconRefresh),
+            syncing ? '同步中…' : '同步模型'
+          )
+        ),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          'OpenAI 兼容接口。同步会向 ',
+          h('code', null, joinUrl(view.baseUrl, 'models')),
+          ' 发一次 GET，读回服务端实际加载的模型。'
+        ),
+        h(
+          Field,
+          {
+            htmlFor: 'tr-base-url',
+            label: '服务地址',
+            hint: '本机默认 ' + DEFAULT_BASE_URL + '。结尾带不带斜杠都行。',
+          },
+          h('input', {
+            id: 'tr-base-url',
+            className: 'tr-input',
+            type: 'text',
+            value: view.baseUrl,
+            spellCheck: false,
+            onChange: function (event) {
+              editDraft(SETTING_IDS.baseUrl, event.target.value);
+            },
+            onBlur: function () {
+              commitTrimmed(SETTING_IDS.baseUrl);
+            },
+          })
+        ),
+        view.baseUrl && !isLoopback(view.baseUrl)
+          ? h(
+              'p',
+              { className: 'tr-warn-line' },
+              '这不是本机回环地址。除了 network 权限，还需要在清单里声明 network-external，否则宿主会拒绝请求。'
+            )
+          : null,
+        h(
+          Field,
+          {
+            htmlFor: 'tr-endpoint-kind',
+            label: '接口形态',
+            hint: 'chat 走 /chat/completions，completion 走 /completions。chat 不稳时换后者。',
+          },
+          h(
+            'select',
+            {
+              id: 'tr-endpoint-kind',
+              className: 'tr-select tr-select-block',
+              value: view.endpointKind,
+              onChange: function (event) {
+                editDraft(SETTING_IDS.endpointKind, event.target.value);
+                saveSettingValue(SETTING_IDS.endpointKind, event.target.value);
+              },
+            },
+            h('option', { value: 'chat' }, 'chat（/chat/completions）'),
+            h('option', { value: 'completion' }, 'completion（/completions）')
+          )
+        ),
+        h(
+          Field,
+          {
+            htmlFor: 'tr-model',
+            label: '模型',
+            hint: '请求体里的 model 字段，必须与服务端加载的那一个逐字一致。',
+          },
+          h('input', {
+            id: 'tr-model',
+            className: 'tr-input',
+            type: 'text',
+            value: view.model,
+            spellCheck: false,
+            onChange: function (event) {
+              editDraft(SETTING_IDS.model, event.target.value);
+            },
+            onBlur: function () {
+              commitTrimmed(SETTING_IDS.model);
+            },
+          })
+        ),
+        h(
+          'div',
+          { className: 'tr-status-line' },
+          h(
+            'span',
+            { className: 'tr-dot tr-dot-' + probe.tone, 'aria-hidden': 'true' }
+          ),
+          h('span', { className: 'tr-status-text' }, probe.value),
+          probe.detail ? h('span', { className: 'tr-status-detail' }, probe.detail) : null
+        ),
+        models.length > 0
+          ? h(
+              'div',
+              { className: 'tr-models' },
+              models.map(function (id) {
+                var selected = id === view.model;
+                return h(
+                  'button',
+                  {
+                    key: id,
+                    type: 'button',
+                    className: 'tr-model' + (selected ? ' tr-model-on' : ''),
+                    title: id,
+                    onClick: function () {
+                      editDraft(SETTING_IDS.model, id);
+                      saveSettingValue(SETTING_IDS.model, id);
+                    },
+                  },
+                  id
+                );
+              })
+            )
+          : null,
+        cache && !cache.ok && cache.error
+          ? h('pre', { className: 'tr-pre tr-probe-error' }, cache.error)
+          : null
+      );
+    }
 
-    return h(
-      'div',
-      { className: 'tr-recorder-row' },
-      button,
-      h(
-        'button',
+    function renderPromptSection() {
+      var sourceReplacement = effectiveSource === 'auto' ? SOURCE_AUTO_HINT : effectiveSource;
+      return h(
+        'section',
+        { className: 'tr-sect' },
+        h('h3', { className: 'tr-sect-title' }, '提示词模板'),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          '占位符：{text}（必需，最后替换）、{target}、{source}。本地小模型对格式很敏感，这一项值得按模型调。'
+        ),
+        h('textarea', {
+          className: 'tr-textarea tr-textarea-mono',
+          value: view.promptTemplate,
+          rows: 8,
+          spellCheck: false,
+          onChange: function (event) {
+            editDraft(SETTING_IDS.promptTemplate, event.target.value);
+          },
+          onBlur: function () {
+            commitField(SETTING_IDS.promptTemplate);
+          },
+        }),
+        h(
+          'div',
+          { className: 'tr-inline-row' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-btn tr-btn-ghost tr-btn-sm',
+              onClick: function () {
+                editDraft(SETTING_IDS.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
+                saveSettingValue(SETTING_IDS.promptTemplate, DEFAULT_PROMPT_TEMPLATE);
+              },
+            },
+            '恢复缺省'
+          ),
+          h('span', { className: 'tr-muted' }, '当前 {source} = ' + sourceReplacement)
+        ),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          '用通用小模型时，把指令换成英文通常更稳：Translate the following text into {target}. Output only the translation.'
+        )
+      );
+    }
+
+    function renderQuickSection() {
+      return h(
+        'section',
+        { className: 'tr-sect' },
+        h('h3', { className: 'tr-sect-title' }, '划词翻译'),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          '在别的程序里选中文字，按组合键，光标旁出现译文卡片。译文只进卡片，不进下面的历史。'
+        ),
+        h(
+          Field,
+          {
+            htmlFor: 'tr-quick-target',
+            label: '划词目标语言',
+            hint: '它与工作台的目标语言是两项独立设置，互不影响。',
+          },
+          h(
+            'select',
+            {
+              id: 'tr-quick-target',
+              className: 'tr-select tr-select-block',
+              value: effectiveQuickTarget,
+              onChange: function (event) {
+                setQuickTarget(event.target.value);
+              },
+            },
+            TARGET_LANGS.map(function (lang) {
+              return h('option', { key: lang, value: lang }, lang);
+            })
+          )
+        ),
+        h(
+          'div',
+          { className: 'tr-subsection' },
+          h('h4', { className: 'tr-sub-title' }, '触发组合键'),
+          h(
+            'p',
+            { className: 'tr-sect-note' },
+            '点方框后按下组合键；改完最多一分钟生效（后台每分钟对一次账）。全局热键在系统里是独占的。'
+          ),
+          h(HotkeyRecorder, {
+            combo: view.triggerCombo,
+            onCommit: function (combo) {
+              editDraft(SETTING_IDS.triggerCombo, combo);
+              return saveSettingValue(SETTING_IDS.triggerCombo, combo);
+            },
+            onClear: function () {
+              editDraft(SETTING_IDS.triggerCombo, '');
+              return saveSettingValue(SETTING_IDS.triggerCombo, '');
+            },
+          }),
+          h(
+            'div',
+            { className: 'tr-status-line' },
+            h('span', { className: 'tr-dot tr-dot-' + hotkeyInfo.tone, 'aria-hidden': 'true' }),
+            h('span', { className: 'tr-status-text' }, hotkeyInfo.value),
+            hotkeyInfo.detail ? h('span', { className: 'tr-status-detail' }, hotkeyInfo.detail) : null
+          ),
+          !hotkeyAvailable || !selectionAvailable
+            ? h(
+                'p',
+                { className: 'tr-warn-line' },
+                '这个平台没有全局热键或读取选中文本的能力（两者都只在 Windows 上提供），上面的工作台照常可用。'
+              )
+            : null,
+          status && status.at
+            ? h('p', { className: 'tr-sect-note' }, '后台最近一次上报：' + formatAgo(status.at))
+            : null
+        ),
+        h(
+          'div',
+          { className: 'tr-subsection' },
+          h('h4', { className: 'tr-sub-title' }, 'API key'),
+          h(
+            'p',
+            { className: 'tr-sect-note' },
+            '存在加密密钥库（ctx.secrets），不在设置里；换机器或网卡后需要重新输入。本机 llama.cpp 默认不校验密钥。'
+          ),
+          h(
+            'div',
+            { className: 'tr-key-state' },
+            keyInfo.present
+              ? h('span', { className: 'tr-tag tr-tag-ok' }, '已保存')
+              : h('span', { className: 'tr-tag tr-tag-muted' }, '未设置'),
+            keyInfo.error ? h('span', { className: 'tr-tag tr-tag-error' }, keyInfo.error) : null
+          ),
+          h(
+            'div',
+            { className: 'tr-inline-row' },
+            h('input', {
+              className: 'tr-input',
+              type: 'password',
+              value: keyDraft,
+              autoComplete: 'off',
+              spellCheck: false,
+              placeholder: keyInfo.present
+                ? '已保存 —— 留空并点「删除」可清除'
+                : '留空也能用（本机服务通常随便填）',
+              'aria-label': 'API key',
+              onChange: function (event) {
+                setKeyDraft(event.target.value);
+              },
+              onKeyDown: function (event) {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitKey();
+                }
+              },
+            }),
+            // 空输入在"已有密钥"时是**删除**，在"没有密钥"时什么都不做。按钮文案跟着
+            // 变，避免"点一下保存把密钥删了"这种不可预料的后果。
+            keyDraft === '' && keyInfo.present
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'tr-btn tr-btn-danger tr-btn-sm',
+                    disabled: keyBusy,
+                    onClick: commitKey,
+                  },
+                  keyBusy ? '删除中…' : '删除'
+                )
+              : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'tr-btn tr-btn-primary tr-btn-sm',
+                    disabled: keyBusy || keyDraft === '',
+                    onClick: commitKey,
+                  },
+                  keyBusy ? '保存中…' : '保存'
+                )
+          )
+        )
+      );
+    }
+
+    function renderDataSection() {
+      return h(
+        'section',
+        { className: 'tr-sect' },
+        h('h3', { className: 'tr-sect-title' }, '数据与隐私'),
+        stats
+          ? h(
+              'div',
+              { className: 'tr-stats' },
+              h(StatCell, { label: '条目', value: formatCount(stats.entries) }),
+              h(StatCell, { label: '置顶', value: formatCount(stats.pinned) }),
+              h(StatCell, { label: '译文总量', value: formatCount(stats.bodyChars) + ' 字' }),
+              h(StatCell, { label: '数据库', value: formatBytes(stats.dbBytes) })
+            )
+          : h('p', { className: 'tr-sect-note' }, '还没有读到统计数据。'),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          '保留策略：未置顶最多 800 条 / 180 天；置顶不计入这两项。译文总量超过约 400 万字符时，从最旧的开始删（会删到置顶）。'
+        ),
+        h(
+          'div',
+          { className: 'tr-inline-row' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-btn tr-btn-sm' + (confirm === 'clear-unpinned' ? ' tr-btn-danger' : ''),
+              disabled: !databaseAvailable() || (stats && stats.entries === 0),
+              onClick: function () {
+                if (confirm === 'clear-unpinned') clearHistory(false);
+                else askConfirm('clear-unpinned');
+              },
+            },
+            confirm === 'clear-unpinned' ? '确认清空未置顶？' : '清空未置顶'
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'tr-btn tr-btn-sm' + (confirm === 'clear-all' ? ' tr-btn-danger' : ''),
+              disabled: !databaseAvailable() || (stats && stats.entries === 0),
+              onClick: function () {
+                if (confirm === 'clear-all') clearHistory(true);
+                else askConfirm('clear-all');
+              },
+            },
+            confirm === 'clear-all' ? '确认全部清空？' : '全部清空'
+          )
+        ),
+        h(
+          'p',
+          { className: 'tr-sect-note' },
+          '历史只保存译文与原文的字符数，原文不进库；库在插件数据目录的 plugin.db 里，会随「插件数据」备份复制到别的机器。'
+        )
+      );
+    }
+
+    function renderDrawer() {
+      if (!drawerOpen) return null;
+
+      return h(
+        'div',
         {
-          type: 'button',
-          className: 'tr-btn tr-btn-ghost tr-btn-mini',
-          // 已经"未设置"时再清一次没有意义 —— 禁用比一个点了什么都不发生的按钮诚实。
-          disabled: props.disabled === true || bound === '',
-          onClick: function () {
-            setMessage('');
-            stopRecording();
-            props.onClear();
+          className: 'tr-overlay',
+          onMouseDown: function (event) {
+            if (event.target === event.currentTarget) setDrawerOpen(false);
           },
         },
-        '清除绑定'
+        h(
+          'aside',
+          {
+            className: 'tr-drawer',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': '划词翻译设置',
+          },
+          h(
+            'div',
+            { className: 'tr-drawer-head' },
+            h('h2', { className: 'tr-drawer-title' }, '设置'),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'tr-iconbtn',
+                'aria-label': '关闭设置',
+                onClick: function () {
+                  setDrawerOpen(false);
+                },
+              },
+              h(IconClose)
+            )
+          ),
+          renderDrawerTabs(),
+          h(
+            'div',
+            { className: 'tr-drawer-body', role: 'tabpanel' },
+            settingsError
+              ? h(
+                  'div',
+                  { className: 'tr-alert tr-alert-inline', role: 'alert' },
+                  h(
+                    'div',
+                    { className: 'tr-alert-head' },
+                    h('span', { className: 'tr-alert-title' }, '设置'),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'tr-iconbtn tr-iconbtn-sm',
+                        'aria-label': '关闭这条错误',
+                        onClick: function () {
+                          setSettingsError('');
+                        },
+                      },
+                      h(IconClose)
+                    )
+                  ),
+                  h('pre', { className: 'tr-pre' }, settingsError)
+                )
+              : null,
+            drawerTab === 'connection'
+              ? renderConnectionSection()
+              : drawerTab === 'prompt'
+                ? renderPromptSection()
+                : drawerTab === 'quick'
+                  ? renderQuickSection()
+                  : renderDataSection()
+          )
+        )
+      );
+    }
+
+    // ----------------------------------------------------------
+    // 顶层
+    // ----------------------------------------------------------
+
+    if (snapshot === null) {
+      return h('div', { className: 'tr-root' }, h('div', { className: 'tr-loading' }, '正在读取状态…'));
+    }
+
+    return h(
+      'div',
+      { className: 'tr-root' + (drawerOpen ? ' tr-root-locked' : '') },
+      h(
+        'div',
+        { className: 'tr-shell' },
+        renderTopbar(),
+        h('main', { className: 'tr-main' }, renderWork(), renderHistory())
       ),
-      recording || message
-        ? h('p', { className: 'tr-recorder-msg' + (message ? ' tr-recorder-msg-warn' : '') },
-            message || '按住 Ctrl / Alt / Shift 中的至少一个再按主键；只按功能键（F1..F24）也可以。Esc 取消。')
-        : null
+      renderDrawer()
     );
   }
 
-  function StatCell(props) {
-    return h(
-      'div',
-      { className: 'tr-stat' },
-      h('div', { className: 'tr-stat-value' }, props.value),
-      h('div', { className: 'tr-stat-label' }, props.label)
-    );
-  }
+  // ============================================================
+  // 描述后台状态（顶栏与抽屉共用）
+  // ============================================================
 
   /**
    * 热键那一行的措辞。
    *
-   * 后台写下的状态是**权威**：它记的是"宿主真的绑上了没有"。`ctx.hotkey.isAvailable()`
-   * 只回答"这件事在这个平台上可不可能"，两者不是一回事（组合键可能被别人占着）。
-   * 状态还没有（后台没跑起来 / 没装 Node）时也要如实说，而不是显示一个看起来
-   * 正常的默认值。
+   * 后台写下的状态是**权威**（它记的是"宿主真的绑上了没有"）；`ctx.hotkey.isAvailable()`
+   * 只回答"这件事在这个平台上可不可能"。两者不是一回事 —— 组合键可能被别人占着。
    */
   function describeHotkey(status, hotkeyAvailable, selectionAvailable) {
     if (!hotkeyAvailable) {
@@ -2971,19 +3467,23 @@
     }
     if (!status || !status.hotkeyState) {
       return {
-        value: '后台还没有上报',
+        value: '等待后台上报',
         tone: 'warn',
-        detail: '后台插件可能没在跑（它需要 Node 运行时），或者刚刚启动',
+        detail: '后台插件需要 Node 运行时；它可能还没启动',
       };
     }
     if (status.hotkeyState === 'registered') {
-      return { value: '已注册 ' + (status.registeredCombo || status.desiredCombo || ''), tone: 'ok', detail: '' };
+      return {
+        value: '已注册 ' + friendlyCombo(status.registeredCombo || status.desiredCombo || ''),
+        tone: 'ok',
+        detail: '',
+      };
     }
     if (status.hotkeyState === 'failed') {
       return { value: '注册失败', tone: 'error', detail: status.hotkeyError || '' };
     }
     if (status.hotkeyState === 'unset') {
-      return { value: '没有设置', tone: 'warn', detail: '设置里的触发组合键是空的' };
+      return { value: '没有设置', tone: 'warn', detail: '触发组合键是空的' };
     }
     return { value: '不可用', tone: 'error', detail: status.hotkeyError || '' };
   }
@@ -2993,14 +3493,14 @@
     if (!cache) {
       return {
         value: '还没有探测过',
-        tone: 'warn',
+        tone: 'off',
         detail: status && status.endpoint ? '后台当前配置：' + status.endpoint : '',
       };
     }
     var when = formatTime(cache.at) + '（' + formatAgo(cache.at) + '）';
     if (cache.ok) {
       return {
-        value: '可达（' + (Array.isArray(cache.models) ? cache.models.length : 0) + ' 个模型）',
+        value: '可达 · ' + (Array.isArray(cache.models) ? cache.models.length : 0) + ' 个模型',
         tone: 'ok',
         detail: '上次探测 ' + when,
       };
@@ -3009,12 +3509,12 @@
       cache.code === 'refused'
         ? '连不上（服务没在跑）'
         : cache.code === 'not-openai'
-        ? '不是 OpenAI 兼容接口'
-        : cache.code === 'empty'
-        ? '服务在跑，但一个模型都没加载'
-        : cache.code === 'auth'
-        ? '服务端要求密钥（401）'
-        : '探测失败';
+          ? '不是 OpenAI 兼容接口'
+          : cache.code === 'empty'
+            ? '服务在跑，但一个模型都没加载'
+            : cache.code === 'auth'
+              ? '服务端要求密钥（401）'
+              : '探测失败';
     return { value: label, tone: 'error', detail: '上次探测 ' + when };
   }
 
@@ -3037,7 +3537,7 @@
       id: 'translate',
       name: '划词翻译',
       description: '本机翻译工具：手动翻译、历史、语言配置，以及可选的划词热键',
-      icon: 'Languages',
+      icon: 'icon.svg',
       priority: 76,
       component: TranslatePanel,
     });

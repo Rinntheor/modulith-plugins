@@ -1,10 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <!-- 左上：一个「文」字被拆成三笔，代表源语言 -->
-  <path d="M3.2 4.6h7.4" stroke="#4f46e5"/>
-  <path d="M6.9 3v1.6" stroke="#4f46e5"/>
-  <path d="M10.2 4.6c-.5 3.6-2.5 6.6-5.9 8.4" stroke="#4f46e5"/>
-  <path d="M5.1 7.7c1 2.2 2.6 4 4.7 5.2" stroke="#4f46e5"/>
-  <!-- 右下：一个字母 A，代表目标语言 -->
-  <path d="M12.6 20.6 16.2 12.2l3.6 8.4" stroke="#4f46e5"/>
-  <path d="M13.8 17.8h4.8" stroke="#4f46e5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4b5563" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="划词翻译">
+  <!-- 原来那一版：左上是一个「文」字被拆成三笔（源语言），右下是字母 A（目标语言）。
+       颜色用中性灰 #4b5563，不带强调色 —— 图标在浅色与深色
+       侧边栏里都看得清，也不会与主题的蓝色强调色混在一起。 -->
+  <path d="M3.2 4.6h7.4" stroke="#4b5563"/>
+  <path d="M6.9 3v1.6" stroke="#4b5563"/>
+  <path d="M10.2 4.6c-.5 3.6-2.5 6.6-5.9 8.4" stroke="#4b5563"/>
+  <path d="M5.1 7.7c1 2.2 2.6 4 4.7 5.2" stroke="#4b5563"/>
+  <path d="M12.6 20.6 16.2 12.2l3.6 8.4" stroke="#4b5563"/>
+  <path d="M13.8 17.8h4.8" stroke="#4b5563"/>
 </svg>

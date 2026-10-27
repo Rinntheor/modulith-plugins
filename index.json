@@ -22,11 +22,11 @@
       ],
       "icon": "plugins/notes/icon.svg",
       "source": "plugins/notes",
-      "latest": "1.0.4",
+      "latest": "1.0.7",
       "versions": [
         {
-          "version": "1.0.4",
-          "tag": "notes-v1.0.4",
+          "version": "1.0.7",
+          "tag": "notes-v1.0.7",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -38,9 +38,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/notes/1.0.4.lcp",
-            "size": 16639,
-            "sha256": "6f1e9bdb30b3f4c3a51237385f4b4af4ed88d16c1af70170ac1673ad8dc43702"
+            "path": "dist/notes/1.0.7.lcp",
+            "size": 16627,
+            "sha256": "989620169b51c3a92fb3eaf4a82a5721b49d274c25938c51016c2394614a7e94"
           }
         }
       ]
@@ -67,11 +67,11 @@
       ],
       "icon": "plugins/pomodoro/icon.svg",
       "source": "plugins/pomodoro",
-      "latest": "1.0.4",
+      "latest": "1.0.7",
       "versions": [
         {
-          "version": "1.0.4",
-          "tag": "pomodoro-v1.0.4",
+          "version": "1.0.7",
+          "tag": "pomodoro-v1.0.7",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -85,9 +85,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/pomodoro/1.0.4.lcp",
-            "size": 19165,
-            "sha256": "4456c7c9b3ee8a370e1fd1417f3734717f04cb5f9cf3fd1731fa1fe1d150e757"
+            "path": "dist/pomodoro/1.0.7.lcp",
+            "size": 19164,
+            "sha256": "08d4438ff5caaa0e17db22c9d62a69fe557d59723285a5f43c0c11b582c5cf26"
           }
         }
       ]
@@ -114,11 +114,11 @@
       ],
       "icon": "plugins/quick-launch/icon.svg",
       "source": "plugins/quick-launch",
-      "latest": "1.1.0",
+      "latest": "1.1.3",
       "versions": [
         {
-          "version": "1.1.0",
-          "tag": "quick-launch-v1.1.0",
+          "version": "1.1.3",
+          "tag": "quick-launch-v1.1.3",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -133,9 +133,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/quick-launch/1.1.0.lcp",
-            "size": 57028,
-            "sha256": "fe94d3b788c0e82d160ddef718bed47d860c3b221ade5dc22f1fb72f8a7befc7"
+            "path": "dist/quick-launch/1.1.3.lcp",
+            "size": 57022,
+            "sha256": "0dcc598b57a6260bd12622d123c2d7e898cf68c25b71cab578de7e38ad309596"
           }
         }
       ]
@@ -162,11 +162,11 @@
       ],
       "icon": "plugins/stand-up/icon.svg",
       "source": "plugins/stand-up",
-      "latest": "1.0.1",
+      "latest": "1.0.2",
       "versions": [
         {
-          "version": "1.0.1",
-          "tag": "stand-up-v1.0.1",
+          "version": "1.0.2",
+          "tag": "stand-up-v1.0.2",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -180,9 +180,9 @@
           "background": true,
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.modulith.sample.stand-up-1.0.1.lcp",
-            "size": 8902,
-            "sha256": "df49f557f9178dc52a43d35244fd73f50f3ca7da7288fdf2013519625800479a"
+            "path": "dist/stand-up/1.0.2.lcp",
+            "size": 8905,
+            "sha256": "eb2c77fe98ade9aa514d68926ef124e61b46226d23cb6cc57cd31c2af39af703"
           }
         }
       ]
@@ -213,11 +213,11 @@
       ],
       "icon": "plugins/art-trace/icon.svg",
       "source": "plugins/art-trace",
-      "latest": "1.0.0",
+      "latest": "1.0.3",
       "versions": [
         {
-          "version": "1.0.0",
-          "tag": "art-trace-v1.0.0",
+          "version": "1.0.3",
+          "tag": "art-trace-v1.0.3",
           "engines": {
             "modulith": ">=1.6.3"
           },
@@ -233,9 +233,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.rinntheor.modulith.art-trace-1.0.0.lcp",
-            "size": 461502,
-            "sha256": "19b2094bb3c18c596b789ddbb3c9f1dc0d021bba5199a43d2bc8021667ab2ea1"
+            "path": "dist/art-trace/1.0.3.lcp",
+            "size": 461468,
+            "sha256": "ef154cfedb5eb091a33d725ca9326ba68baaca44a31cc1e16b6ec306ee9cb237"
           }
         }
       ]
@@ -261,11 +261,11 @@
       ],
       "icon": "plugins/clipboard-history/icon.svg",
       "source": "plugins/clipboard-history",
-      "latest": "1.0.1",
+      "latest": "1.0.4",
       "versions": [
         {
-          "version": "1.0.1",
-          "tag": "clipboard-history-v1.0.1",
+          "version": "1.0.4",
+          "tag": "clipboard-history-v1.0.4",
           "engines": {
             "modulith": ">=1.7.0"
           },
@@ -281,9 +281,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/clipboard-history/1.0.1.lcp",
-            "size": 48711,
-            "sha256": "6b88fe5c7c720ded7f0fbb0800cdedd6645c4d1a3dfc68c4e861b83db865775c"
+            "path": "dist/clipboard-history/1.0.4.lcp",
+            "size": 48706,
+            "sha256": "10850f2c034034db23c212a202da205d4006ec617c680c8f4a43bbcd2bada9c1"
           }
         }
       ]
@@ -313,11 +313,11 @@
       ],
       "icon": "plugins/color-lab/icon.svg",
       "source": "plugins/color-lab",
-      "latest": "1.0.3",
+      "latest": "1.0.4",
       "versions": [
         {
-          "version": "1.0.3",
-          "tag": "color-lab-v1.0.3",
+          "version": "1.0.4",
+          "tag": "color-lab-v1.0.4",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -329,9 +329,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.rinntheor.modulith.color-lab-1.0.3.lcp",
-            "size": 20475,
-            "sha256": "d9c361f03cc46186685af96689e3a3134d2c7a19b66ce1c6114b805c345151e2"
+            "path": "dist/color-lab/1.0.4.lcp",
+            "size": 20471,
+            "sha256": "704ffd5b1d21bff7c643854a6171eba2e59cb896ef3bc2f3b21772230f73517b"
           }
         }
       ]
@@ -362,11 +362,11 @@
       ],
       "icon": "plugins/encode-lab/icon.svg",
       "source": "plugins/encode-lab",
-      "latest": "1.1.0",
+      "latest": "1.1.1",
       "versions": [
         {
-          "version": "1.1.0",
-          "tag": "encode-lab-v1.1.0",
+          "version": "1.1.1",
+          "tag": "encode-lab-v1.1.1",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -378,9 +378,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/encode-lab/1.1.0.lcp",
-            "size": 37606,
-            "sha256": "51f43ba4a7307d4a1e2fb0c4b6bfab7762c8b176e5a7269008d2f22d5312806b"
+            "path": "dist/encode-lab/1.1.1.lcp",
+            "size": 37597,
+            "sha256": "34dacc931fd853af810df63bff98ba3d8b1c6724b63613766143934288d81fd4"
           }
         }
       ]
@@ -404,11 +404,11 @@
       ],
       "icon": "plugins/hello/icon.svg",
       "source": "plugins/hello",
-      "latest": "1.0.4",
+      "latest": "1.0.5",
       "versions": [
         {
-          "version": "1.0.4",
-          "tag": "hello-v1.0.4",
+          "version": "1.0.5",
+          "tag": "hello-v1.0.5",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -420,9 +420,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/hello/1.0.4.lcp",
-            "size": 8428,
-            "sha256": "1d5e72346b05bc4c45659599ca0c60d9c0521942c22ecef2d77aa5a3179b50cb"
+            "path": "dist/hello/1.0.5.lcp",
+            "size": 8429,
+            "sha256": "a54864d457036431551f1a3104a2846d9989a20e053e19049e94c3091926150d"
           }
         }
       ]
@@ -448,11 +448,11 @@
       ],
       "icon": "plugins/kanban/icon.svg",
       "source": "plugins/kanban",
-      "latest": "1.0.5",
+      "latest": "1.0.6",
       "versions": [
         {
-          "version": "1.0.5",
-          "tag": "kanban-v1.0.5",
+          "version": "1.0.6",
+          "tag": "kanban-v1.0.6",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -467,9 +467,61 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.rinntheor.modulith.kanban-1.0.5.lcp",
-            "size": 105607,
-            "sha256": "d6ef2659d200655f5eaea41372a92dcd987f7a351d9c950a05dfd339bba69a79"
+            "path": "dist/kanban/1.0.6.lcp",
+            "size": 105601,
+            "sha256": "ee28fb1af4b3bda07649be32aac59d1945c88098c18af05cb2cee941a9440911"
+          }
+        }
+      ]
+    },
+    {
+      "id": "com.rinntheor.modulith.prob-lab",
+      "displayName": "概率实验室",
+      "summary": "用可复现的随机试验核对直觉：命中率如何收敛到设定概率、单次抽签的运气有多离谱，以及精确的二项分布算给你看。",
+      "author": {
+        "name": "环理论",
+        "url": "https://github.com/Rinntheor"
+      },
+      "license": "MIT",
+      "categories": [
+        "开发",
+        "效率"
+      ],
+      "keywords": [
+        "probability",
+        "random",
+        "simulation",
+        "statistics",
+        "binomial",
+        "confidence",
+        "seed",
+        "概率",
+        "随机",
+        "模拟",
+        "统计",
+        "二项分布"
+      ],
+      "icon": "plugins/prob-lab/icon.svg",
+      "source": "plugins/prob-lab",
+      "latest": "1.0.0",
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tag": "prob-lab-v1.0.0",
+          "engines": {
+            "modulith": ">=1.6.0"
+          },
+          "permissions": [
+            "storage"
+          ],
+          "kinds": [
+            "modules"
+          ],
+          "runtime": "sandboxed",
+          "package": {
+            "path": "dist/prob-lab/1.0.0.lcp",
+            "size": 41427,
+            "sha256": "f24aa7f7d43b4db79f3303a90bcca04e4378b6f2938660463bf804e447cf91ca"
           }
         }
       ]
@@ -496,11 +548,11 @@
       ],
       "icon": "plugins/regex-lab/icon.svg",
       "source": "plugins/regex-lab",
-      "latest": "1.0.3",
+      "latest": "1.0.4",
       "versions": [
         {
-          "version": "1.0.3",
-          "tag": "regex-lab-v1.0.3",
+          "version": "1.0.4",
+          "tag": "regex-lab-v1.0.4",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -512,9 +564,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.rinntheor.modulith.regex-lab-1.0.3.lcp",
-            "size": 34427,
-            "sha256": "010247be84b5a1d0c1dd6576fd6ffe35c593116bb6a07dbd98020300bfac91b9"
+            "path": "dist/regex-lab/1.0.4.lcp",
+            "size": 34417,
+            "sha256": "cc307c10c6fe2088a484e21782f02cd8ad6df811de460c4742dd749b327f045f"
           }
         }
       ]
@@ -546,11 +598,11 @@
       ],
       "icon": "plugins/translate/icon.svg",
       "source": "plugins/translate",
-      "latest": "2.0.0",
+      "latest": "3.0.0",
       "versions": [
         {
-          "version": "2.0.0",
-          "tag": "translate-v2.0.0",
+          "version": "3.0.0",
+          "tag": "translate-v3.0.0",
           "engines": {
             "modulith": ">=1.7.0"
           },
@@ -571,9 +623,9 @@
           "background": true,
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/translate/2.0.0.lcp",
-            "size": 77845,
-            "sha256": "77a810df79e4ec7a36901cc9f4fb3bcc46df9737c01d05ea986d0ec8cf0efb4a"
+            "path": "dist/translate/3.0.0.lcp",
+            "size": 81013,
+            "sha256": "3e9dab8793a59ce3464fe6ae1b9d05c038fc9419f6fa62e30588cc7fa9bf41f0"
           }
         }
       ]
@@ -599,11 +651,11 @@
       ],
       "icon": "plugins/typing-practice/icon.svg",
       "source": "plugins/typing-practice",
-      "latest": "1.1.4",
+      "latest": "1.1.5",
       "versions": [
         {
-          "version": "1.1.4",
-          "tag": "typing-practice-v1.1.4",
+          "version": "1.1.5",
+          "tag": "typing-practice-v1.1.5",
           "engines": {
             "modulith": ">=1.6.0"
           },
@@ -615,9 +667,9 @@
           ],
           "runtime": "sandboxed",
           "package": {
-            "path": "dist/com.rinntheor.modulith.typing-practice-1.1.4.lcp",
-            "size": 43600,
-            "sha256": "824ebb1fb2473a760c4479e718eddfdfda68250589688bed6d981b807c0f6122"
+            "path": "dist/typing-practice/1.1.5.lcp",
+            "size": 43593,
+            "sha256": "626abebde2c5857195542a9441882d058c20dd0ec7fc962e63ee268fa729e6f6"
           }
         }
       ]

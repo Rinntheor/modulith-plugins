@@ -1131,7 +1131,7 @@
     id: 'pomodoro',
     name: '番茄工作钟',
     description: '专注 / 休息循环计时，支持自定义提示音与提醒',
-    icon: 'Timer',
+    icon: 'icon.svg',
     priority: 75,
     component: Pomodoro,
   });

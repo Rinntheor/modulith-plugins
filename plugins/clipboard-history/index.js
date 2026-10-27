@@ -2645,7 +2645,7 @@
       id: 'clipboard-history',
       name: '剪贴板历史',
       description: '留下复制过的东西，随时贴回去',
-      icon: 'ClipboardList',
+      icon: 'icon.svg',
       priority: 72,
       component: ClipboardHistory,
     });

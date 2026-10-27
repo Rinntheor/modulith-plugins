@@ -637,7 +637,7 @@
     id: 'notes',
     name: '文本速记',
     description: '随手记下想法、待办与片段',
-    icon: 'NotebookPen',
+    icon: 'icon.svg',
     priority: 70,
     component: Notes,
   });

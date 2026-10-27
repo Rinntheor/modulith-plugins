@@ -1,7 +1,7 @@
 {
   "name": "com.rinntheor.modulith.translate",
   "displayName": "划词翻译",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "在别的程序里选中一段文字，按一下热键就出译文。译文由你自己跑在本机的 OpenAI 兼容模型服务（llama.cpp 的 server 一类）生成，选中的文字与译文都不离开这台机器。",
   "author": {
     "name": "环理论",
@@ -52,7 +52,7 @@
         "id": "translate",
         "name": "划词翻译",
         "description": "选中文本按一下热键就出译文；也可以在这里手动翻译",
-        "icon": "Languages",
+        "icon": "icon.svg",
         "priority": 76
       }
     ],
@@ -99,7 +99,7 @@
       {
         "id": "sourceLang",
         "label": "源语言",
-        "description": "会替换提示词模板里的 {source}。缺省是「自动」—— 本插件不做语言检测（那需要另一个模型），自动时 {source} 被替换成一句让模型自己判断的话，而不是随便猜一个语言名。",
+        "description": "工作台与划词翻译共用的源语言。会替换提示词模板里的 {source}。缺省是「自动」—— 本插件不做语言检测（那需要另一个模型），自动时 {source} 被替换成一句让模型自己判断的话，而不是随便猜一个语言名。",
         "type": "select",
         "default": "auto",
         "options": [
@@ -120,8 +120,29 @@
       },
       {
         "id": "targetLang",
-        "label": "目标语言",
-        "description": "译文的目标语言，会替换提示词模板里的 {target}。",
+        "label": "工作台目标语言",
+        "description": "在插件面板里手动翻译时用的目标语言。它与「划词目标语言」是两项独立的设置：改这一项不会影响在别的程序里按热键的译文语言。",
+        "type": "select",
+        "default": "简体中文",
+        "options": [
+          { "value": "简体中文", "label": "简体中文" },
+          { "value": "繁體中文", "label": "繁體中文" },
+          { "value": "English", "label": "English" },
+          { "value": "日本語", "label": "日本語" },
+          { "value": "한국어", "label": "한국어" },
+          { "value": "Русский", "label": "Русский" },
+          { "value": "Français", "label": "Français" },
+          { "value": "Deutsch", "label": "Deutsch" },
+          { "value": "Español", "label": "Español" },
+          { "value": "Italiano", "label": "Italiano" },
+          { "value": "Português", "label": "Português" },
+          { "value": "العربية", "label": "العربية" }
+        ]
+      },
+      {
+        "id": "quickTargetLang",
+        "label": "划词目标语言",
+        "description": "在别的程序里选中文字、按热键翻译时用的目标语言。它和工作台那一项分开，因此你可以让工作台翻成英文读资料、划词仍然翻回中文。没有设置过时跟随「工作台目标语言」（升级前的行为保持不变）。",
         "type": "select",
         "default": "简体中文",
         "options": [
